@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comments App</title>
+</head>
+<body>
+  <h1>Welcome to the Comments App</h1>
+
+  <!-- Form to add a comment -->
+  <form id="commentForm">
+    <label for="name">Your Name:</label>
+    <input type="text" id="name" name="name" required>
+    <br><br>
+    <label for="comment">Your Comment:</label>
+    <textarea id="comment" name="comment" rows="4" required></textarea>
+    <br><br>
+    <button type="submit">Submit</button>
+  </form>
+
+  <h2>Previous Comments:</h2>
+  <ul id="commentsList"></ul>
+
+  <script src="script.js" type="module"></script>
+</body>
+</html>
