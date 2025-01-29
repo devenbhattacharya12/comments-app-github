@@ -3,90 +3,94 @@ document.addEventListener('DOMContentLoaded', () => {
   loadComments();
 });
 
-// Check if user is logged in
+// Check Login Status
 function checkLoginStatus() {
-  const currentUser = localStorage.getItem('username');
-  const userDisplay = document.getElementById('currentUser');
-  const authForm = document.getElementById('authForm');
-  const logoutButton = document.getElementById('logoutButton');
-  const commentForm = document.getElementById('commentForm');
-
-  if (currentUser) {
-    userDisplay.textContent = `@${currentUser}`;
-    authForm.classList.add('d-none');
-    logoutButton.classList.remove('d-none');
-    commentForm.classList.remove('d-none');
+  const token = localStorage.getItem('token');
+  if (token) {
+    document.getElementById('authSection').classList.add('d-none');
+    document.getElementById('logoutButton').classList.remove('d-none');
+    document.getElementById('commentSection').classList.remove('d-none');
   }
 }
 
-// Handle Login/Register
-document.getElementById('authForm').addEventListener('submit', async (e) => {
+// Handle User Registration
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const username = document.getElementById('usernameInput').value.trim();
+  const username = document.getElementById('registerUsername').value.trim();
+  const password = document.getElementById('registerPassword').value.trim();
+
+  const response = await fetch('/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (response.ok) {
+    alert('Registration successful! You can now log in.');
+  } else {
+    alert('Error: Username might already exist.');
+  }
+});
+
+// Handle User Login
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
 
   const response = await fetch('/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username }),
+    body: JSON.stringify({ username, password }),
   });
 
+  const data = await response.json();
   if (response.ok) {
-    localStorage.setItem('username', username);
+    localStorage.setItem('token', data.token);
     checkLoginStatus();
   } else {
-    alert('Error logging in. Try again.');
+    alert('Login failed.');
   }
 });
 
 // Logout User
 document.getElementById('logoutButton').addEventListener('click', () => {
-  fetch('/logout', { method: 'POST' });
-  localStorage.removeItem('username');
+  localStorage.removeItem('token');
   window.location.reload();
 });
 
 // Load Comments
 async function loadComments() {
-  try {
-    const response = await fetch('/comments');
-    const comments = await response.json();
+  const response = await fetch('/comments');
+  const comments = await response.json();
+  const commentsList = document.getElementById('commentsList');
+  commentsList.innerHTML = '';
 
-    const commentsList = document.getElementById('commentsList');
-    commentsList.innerHTML = '';
-
-    comments.forEach(comment => {
-      const li = document.createElement('li');
-      li.classList.add('list-group-item');
-
-      li.innerHTML = `
-        <div>
-          <span class="comment-name">@${comment.username}</span>
-          <span class="comment-time"> · ${new Date(comment.timestamp).toLocaleString()}</span>
-          <p class="comment-text">${comment.comment}</p>
-        </div>
-      `;
-
-      commentsList.appendChild(li);
-    });
-  } catch (err) {
-    console.error('Error fetching comments:', err);
-  }
+  comments.forEach(comment => {
+    const li = document.createElement('li');
+    li.classList.add('list-group-item');
+    li.innerHTML = `<strong>@${comment.username}</strong>: ${comment.comment}`;
+    commentsList.appendChild(li);
+  });
 }
 
-// Submit Comment
+// Post Comment
 document.getElementById('commentForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const username = localStorage.getItem('username');
+  const token = localStorage.getItem('token');
   const comment = document.getElementById('comment').value.trim();
 
-  if (!username) {
+  if (!token) {
     alert('You must be logged in to comment.');
     return;
   }
 
   const response = await fetch('/comments', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
     body: JSON.stringify({ comment }),
   });
 
@@ -94,6 +98,6 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
     document.getElementById('comment').value = '';
     loadComments();
   } else {
-    alert('Error submitting comment.');
+    alert('Error posting comment.');
   }
 });
