@@ -9,7 +9,16 @@ async function loadComments() {
   
       comments.forEach(comment => {
         const li = document.createElement('li');
-        li.textContent = `${comment.name} said: "${comment.comment}" on ${new Date(comment.timestamp).toLocaleString()}`;
+        li.classList.add('list-group-item');
+  
+        li.innerHTML = `
+          <div>
+            <span class="comment-name">@${comment.name}</span>
+            <span class="comment-time"> · ${new Date(comment.timestamp).toLocaleString()}</span>
+            <p class="comment-text">${comment.comment}</p>
+          </div>
+        `;
+  
         commentsList.appendChild(li);
       });
     } catch (err) {
