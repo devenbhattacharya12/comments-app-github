@@ -11,7 +11,13 @@ const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET || "supersecretkey";
 
 // Debug: Ensure MONGO_URI is read correctly
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || "";
+console.log("🔍 Checking MONGO_URI:", MONGO_URI);
+
+if (!MONGO_URI || MONGO_URI.trim() === "") {
+  console.error("❌ MONGO_URI is missing or empty! Check Render environment variables.");
+  process.exit(1);
+}
 if (!MONGO_URI) {
   console.error("❌ MONGO_URI is not defined! Check your environment variables.");
   process.exit(1); // Stop execution if MONGO_URI is missing
