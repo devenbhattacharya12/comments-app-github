@@ -49,6 +49,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   if (response.ok) {
     localStorage.setItem('token', data.token);
     localStorage.setItem('username', username);
+    localStorage.setItem('lastChecked', new Date().toISOString()); // Store last login time
     checkLoginStatus();
   } else {
     alert('Login failed.');
@@ -59,6 +60,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 document.getElementById('logoutButton').addEventListener('click', () => {
   localStorage.removeItem('token');
   localStorage.removeItem('username');
+  localStorage.removeItem('lastChecked');
   window.location.reload();
 });
 
@@ -125,6 +127,7 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
 
   if (response.ok) {
     document.getElementById('comment').value = '';
+    localStorage.setItem('lastChecked', new Date().toISOString()); // Update last checked time
     loadComments();
   } else {
     alert('Error posting comment.');
@@ -134,19 +137,27 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
 // Check for new comments
 async function checkNewComments() {
   const username = localStorage.getItem("username");
+  const lastChecked = localStorage.getItem("lastChecked") || new Date(0).toISOString();
   if (!username) return;
 
   try {
-    const response = await fetch(`/new-comments?username=${username}`);
+    const response = await fetch(`/new-comments?username=${username}&since=${lastChecked}`);
     const data = await response.json();
 
+    const notificationBadge = document.getElementById('notificationBadge');
     if (data.count > 0) {
-      alert(`🔔 ${data.count} new comments since your last post!`);
+      notificationBadge.innerText = `🔔 ${data.count} new comments since your last visit!`;
+      notificationBadge.classList.remove('d-none');
+    } else {
+      notificationBadge.classList.add('d-none');
     }
+
+    localStorage.setItem('lastChecked', new Date().toISOString()); // Update last checked time
   } catch (error) {
     console.error("Error checking new comments:", error);
   }
 }
+
 
 // Ensure likeComment is globally accessible
 window.likeComment = likeComment;

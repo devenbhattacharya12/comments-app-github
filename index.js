@@ -176,6 +176,30 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
   }
 });
 
+// Check for new comments since the last checked time
+app.get('/new-comments', authenticateToken, async (req, res) => {
+  const { username, since } = req.query;
+
+  if (!username || !since) {
+    return res.status(400).json({ error: 'Username and last checked timestamp are required.' });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const newComments = await Comment.find({
+      timestamp: { $gt: new Date(since) }
+    });
+
+    res.json({ newComments, count: newComments.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to check new comments.' });
+  }
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`✅ Safe Space is running at http://localhost:${PORT}`);
