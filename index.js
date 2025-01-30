@@ -1,30 +1,32 @@
+// index.js (Backend) - Safe Space App
 require('dotenv').config(); // Load environment variables
 const express = require('express');
-const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const bcrypt = require('bcrypt'); // Hash passwords
 const jwt = require('jsonwebtoken'); // Secure authentication
-const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SECRET_KEY = process.env.JWT_SECRET || "supersecretkey"; // Used for JWT authentication
+const SECRET_KEY = process.env.JWT_SECRET || "supersecretkey";
 
-// Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static('public'));
 
-// Connect to MongoDB Atlas
-mongoose.connect('mongodb+srv://devenbhattacharya:deven123@app-comment.583cy.mongodb.net/commentsApp', {
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
-});
+})
+  .then(() => console.log("✅ Connected to MongoDB"))
+  .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
 // User Schema with Password Hashing
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
-  password: { type: String, required: true } // Store hashed passwords
+  password: { type: String, required: true }, // Store hashed passwords
+  lastPostedAt: { type: Date, default: null }
 });
 const User = mongoose.model('User', userSchema);
 
@@ -32,7 +34,8 @@ const User = mongoose.model('User', userSchema);
 const commentSchema = new mongoose.Schema({
   username: String,
   comment: String,
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
+  likes: { type: Number, default: 0 }
 });
 const Comment = mongoose.model('Comment', commentSchema);
 
@@ -52,7 +55,7 @@ app.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Username already exists.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10); // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
     const newUser = new User({ username, password: hashedPassword });
     await newUser.save();
 
@@ -122,13 +125,58 @@ app.post('/comments', authenticateToken, async (req, res) => {
   try {
     const newComment = new Comment({ username, comment });
     await newComment.save();
+
+    await User.findOneAndUpdate(
+      { username },
+      { lastPostedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
     res.status(201).json({ message: 'Comment added!', comment: newComment });
   } catch (err) {
     res.status(500).json({ error: 'Failed to add comment' });
   }
 });
 
-// Start Server
+// Like a Comment
+app.post('/like-comment', authenticateToken, async (req, res) => {
+  const { commentId } = req.body;
+  try {
+    const comment = await Comment.findByIdAndUpdate(commentId, { $inc: { likes: 1 } }, { new: true });
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+    res.json({ message: 'Comment liked!', likes: comment.likes });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to like comment.' });
+  }
+});
+
+// Check for new comments since last post
+app.get('/new-comments', async (req, res) => {
+  const { username } = req.query;
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const newComments = await Comment.find({
+      timestamp: { $gt: user.lastPostedAt || new Date(0) }
+    });
+
+    res.json({ newComments, count: newComments.length });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to check new comments.' });
+  }
+});
+
+// Start the server
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Safe Space is running at http://localhost:${PORT}`);
 });
