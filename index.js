@@ -18,11 +18,6 @@ if (!MONGO_URI || MONGO_URI.trim() === "") {
   console.error("❌ MONGO_URI is missing or empty! Check Render environment variables.");
   process.exit(1);
 }
-if (!MONGO_URI) {
-  console.error("❌ MONGO_URI is not defined! Check your environment variables.");
-  process.exit(1); // Stop execution if MONGO_URI is missing
-}
-console.log("🔍 Using MongoDB URI:", MONGO_URI);
 
 // Connect to MongoDB
 mongoose.connect(MONGO_URI, {
@@ -152,45 +147,25 @@ app.post('/comments', authenticateToken, async (req, res) => {
 
     res.status(201).json({ message: 'Comment added!', comment: newComment });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add comment' });
+    res.status(500).json({ error: 'Failed to add comment.' });
   }
 });
 
-// Like a Comment
+// Like a Comment and Update UI
 app.post('/like-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   try {
-    const comment = await Comment.findByIdAndUpdate(commentId, { $inc: { likes: 1 } }, { new: true });
+    const comment = await Comment.findByIdAndUpdate(
+      commentId, 
+      { $inc: { likes: 1 } }, 
+      { new: true }
+    );
     if (!comment) {
       return res.status(404).json({ error: 'Comment not found.' });
     }
-    res.json({ message: 'Comment liked!', likes: comment.likes });
+    res.json({ message: 'Comment liked!', likes: comment.likes, updatedComment: comment });
   } catch (err) {
     res.status(500).json({ error: 'Failed to like comment.' });
-  }
-});
-
-// Check for new comments since last post
-app.get('/new-comments', async (req, res) => {
-  const { username } = req.query;
-
-  if (!username) {
-    return res.status(400).json({ error: 'Username is required.' });
-  }
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const newComments = await Comment.find({
-      timestamp: { $gt: user.lastPostedAt || new Date(0) }
-    });
-
-    res.json({ newComments, count: newComments.length });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to check new comments.' });
   }
 });
 
