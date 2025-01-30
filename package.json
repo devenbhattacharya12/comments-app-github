@@ -1,5 +1,5 @@
 {
-    "name": "comments-app",
+    "name": "safe-space",
     "version": "1.0.0",
     "description": "Secure Comments App with JWT Authentication",
     "main": "index.js",
