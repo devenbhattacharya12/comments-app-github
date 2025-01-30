@@ -62,7 +62,7 @@ document.getElementById('logoutButton').addEventListener('click', () => {
   window.location.reload();
 });
 
-// Load Comments
+// Load Comments with Like Buttons
 async function loadComments() {
   const response = await fetch('/comments');
   const comments = await response.json();
@@ -73,9 +73,34 @@ async function loadComments() {
     const li = document.createElement('li');
     li.classList.add('list-group-item');
     li.innerHTML = `<strong>@${comment.username}</strong>: ${comment.comment} 
-      <button onclick="likeComment('${comment._id}')" class="btn btn-sm btn-outline-primary">Like (${comment.likes})</button>`;
+      <button onclick="likeComment('${comment._id}')" class="btn btn-sm btn-outline-primary">Like (<span id="likes-${comment._id}">${comment.likes}</span>)</button>`;
     commentsList.appendChild(li);
   });
+}
+
+// Like Comment
+async function likeComment(commentId) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('You must be logged in to like a comment.');
+    return;
+  }
+
+  const response = await fetch('/like-comment', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ commentId }),
+  });
+
+  if (response.ok) {
+    const data = await response.json();
+    document.getElementById(`likes-${commentId}`).innerText = data.likes; // Update UI with new like count
+  } else {
+    alert('Error liking comment.');
+  }
 }
 
 // Post Comment
@@ -106,30 +131,6 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
   }
 });
 
-// Like Comment
-async function likeComment(commentId) {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    alert('You must be logged in to like a comment.');
-    return;
-  }
-
-  const response = await fetch('/like-comment', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ commentId }),
-  });
-
-  if (response.ok) {
-    loadComments();
-  } else {
-    alert('Error liking comment.');
-  }
-}
-
 // Check for new comments
 async function checkNewComments() {
   const username = localStorage.getItem("username");
@@ -146,3 +147,6 @@ async function checkNewComments() {
     console.error("Error checking new comments:", error);
   }
 }
+
+// Ensure likeComment is globally accessible
+window.likeComment = likeComment;
