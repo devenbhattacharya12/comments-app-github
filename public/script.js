@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   checkLoginStatus();
   loadComments();
+  setInterval(checkNewComments, 10000); // Check for new comments every 10 seconds
 });
 
 // Check Login Status
@@ -47,6 +48,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const data = await response.json();
   if (response.ok) {
     localStorage.setItem('token', data.token);
+    localStorage.setItem('username', username);
     checkLoginStatus();
   } else {
     alert('Login failed.');
@@ -56,6 +58,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 // Logout User
 document.getElementById('logoutButton').addEventListener('click', () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('username');
   window.location.reload();
 });
 
@@ -69,7 +72,8 @@ async function loadComments() {
   comments.forEach(comment => {
     const li = document.createElement('li');
     li.classList.add('list-group-item');
-    li.innerHTML = `<strong>@${comment.username}</strong>: ${comment.comment}`;
+    li.innerHTML = `<strong>@${comment.username}</strong>: ${comment.comment} 
+      <button onclick="likeComment('${comment._id}')" class="btn btn-sm btn-outline-primary">Like (${comment.likes})</button>`;
     commentsList.appendChild(li);
   });
 }
@@ -101,3 +105,44 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
     alert('Error posting comment.');
   }
 });
+
+// Like Comment
+async function likeComment(commentId) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('You must be logged in to like a comment.');
+    return;
+  }
+
+  const response = await fetch('/like-comment', {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ commentId }),
+  });
+
+  if (response.ok) {
+    loadComments();
+  } else {
+    alert('Error liking comment.');
+  }
+}
+
+// Check for new comments
+async function checkNewComments() {
+  const username = localStorage.getItem("username");
+  if (!username) return;
+
+  try {
+    const response = await fetch(`/new-comments?username=${username}`);
+    const data = await response.json();
+
+    if (data.count > 0) {
+      alert(`🔔 ${data.count} new comments since your last post!`);
+    }
+  } catch (error) {
+    console.error("Error checking new comments:", error);
+  }
+}
