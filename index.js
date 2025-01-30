@@ -48,7 +48,8 @@ const commentSchema = new mongoose.Schema({
   username: String,
   comment: String,
   timestamp: { type: Date, default: Date.now },
-  likes: { type: Number, default: 0 }
+  likes: { type: Number, default: 0 },
+  likedBy: { type: [String], default: [] } // Track users who liked
 });
 const Comment = mongoose.model('Comment', commentSchema);
 
@@ -151,19 +152,25 @@ app.post('/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Like a Comment and Update UI
+// Like a Comment (Prevents Duplicate Likes)
 app.post('/like-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
+  const username = req.user.username;
   try {
-    const comment = await Comment.findByIdAndUpdate(
-      commentId, 
-      { $inc: { likes: 1 } }, 
-      { new: true }
-    );
+    const comment = await Comment.findById(commentId);
     if (!comment) {
       return res.status(404).json({ error: 'Comment not found.' });
     }
-    res.json({ message: 'Comment liked!', likes: comment.likes, updatedComment: comment });
+
+    if (comment.likedBy.includes(username)) {
+      return res.status(400).json({ error: 'You have already liked this comment.' });
+    }
+
+    comment.likes += 1;
+    comment.likedBy.push(username);
+    await comment.save();
+
+    res.json({ message: 'Comment liked!', likes: comment.likes });
   } catch (err) {
     res.status(500).json({ error: 'Failed to like comment.' });
   }
