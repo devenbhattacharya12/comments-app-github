@@ -176,12 +176,12 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
   }
 });
 
-// Check for new comments since the last checked time
+// Check for new comments since the user's last post
 app.get('/new-comments', authenticateToken, async (req, res) => {
-  const { username, since } = req.query;
+  const { username } = req.query;
 
-  if (!username || !since) {
-    return res.status(400).json({ error: 'Username and last checked timestamp are required.' });
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
   }
 
   try {
@@ -190,8 +190,10 @@ app.get('/new-comments', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    // Get new comments since the last time the user posted a comment
+    const lastPostedAt = user.lastPostedAt || new Date(0);
     const newComments = await Comment.find({
-      timestamp: { $gt: new Date(since) }
+      timestamp: { $gt: lastPostedAt }
     });
 
     res.json({ newComments, count: newComments.length });
@@ -199,6 +201,7 @@ app.get('/new-comments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to check new comments.' });
   }
 });
+
 
 // Start the server
 app.listen(PORT, () => {

@@ -134,29 +134,29 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
   }
 });
 
-// Check for new comments
+// Check for new comments since the last time the user posted
 async function checkNewComments() {
   const username = localStorage.getItem("username");
-  const lastChecked = localStorage.getItem("lastChecked") || new Date(0).toISOString();
   if (!username) return;
 
   try {
-    const response = await fetch(`/new-comments?username=${username}&since=${lastChecked}`);
+    const response = await fetch(`/new-comments?username=${username}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem("token")}` }
+    });
     const data = await response.json();
 
     const notificationBadge = document.getElementById('notificationBadge');
     if (data.count > 0) {
-      notificationBadge.innerText = `🔔 ${data.count} new comments since your last visit!`;
+      notificationBadge.innerText = `🔔 ${data.count} new comments since your last post!`;
       notificationBadge.classList.remove('d-none');
     } else {
       notificationBadge.classList.add('d-none');
     }
-
-    localStorage.setItem('lastChecked', new Date().toISOString()); // Update last checked time
   } catch (error) {
     console.error("Error checking new comments:", error);
   }
 }
+
 
 
 // Ensure likeComment is globally accessible
