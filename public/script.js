@@ -28,6 +28,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
 
   if (response.ok) {
     alert('Registration successful! You can now log in.');
+    document.getElementById('registerForm').reset();
   } else {
     alert('Error: Username might already exist.');
   }
@@ -64,20 +65,60 @@ document.getElementById('logoutButton').addEventListener('click', () => {
   window.location.reload();
 });
 
-// Load Comments with Like Buttons
+// Load Comments with Like and Dislike Buttons
 async function loadComments() {
-  const response = await fetch('/comments');
-  const comments = await response.json();
-  const commentsList = document.getElementById('commentsList');
-  commentsList.innerHTML = '';
+  try {
+    const response = await fetch('/comments');
+    const comments = await response.json();
+    const commentsList = document.getElementById('commentsList');
+    commentsList.innerHTML = '';
 
-  comments.forEach(comment => {
-    const li = document.createElement('li');
-    li.classList.add('list-group-item');
-    li.innerHTML = `<strong>@${comment.username}</strong>: ${comment.comment} 
-      <button onclick="likeComment('${comment._id}')" class="btn btn-sm btn-outline-primary">Like (<span id="likes-${comment._id}">${comment.likes}</span>)</button>`;
-    commentsList.appendChild(li);
-  });
+    if (comments.length === 0) {
+      commentsList.innerHTML = '<li class="list-group-item text-muted text-center">No thoughts yet... be the first to share!</li>';
+      return;
+    }
+
+    comments.forEach(comment => {
+      const li = document.createElement('li');
+      li.classList.add('list-group-item');
+      
+      // Comment content
+      const commentContent = document.createElement('div');
+      commentContent.innerHTML = `<strong class="comment-name">@${comment.username}</strong>: ${comment.comment}`;
+      
+      // Button container
+      const buttonContainer = document.createElement('div');
+      buttonContainer.classList.add('d-flex', 'gap-2', 'mt-2', 'align-items-center');
+      
+      // Like button
+      const likeButton = document.createElement('button');
+      likeButton.className = 'btn btn-sm btn-outline-success';
+      likeButton.innerHTML = `👍 Like (<span id="likes-${comment._id}">${comment.likes || 0}</span>)`;
+      likeButton.onclick = () => likeComment(comment._id);
+      
+      // Dislike button
+      const dislikeButton = document.createElement('button');
+      dislikeButton.className = 'btn btn-sm btn-outline-danger';
+      dislikeButton.innerHTML = `👎 Dislike (<span id="dislikes-${comment._id}">${comment.dislikes || 0}</span>)`;
+      dislikeButton.onclick = () => dislikeComment(comment._id);
+      
+      // Timestamp
+      const timestamp = document.createElement('small');
+      timestamp.className = 'text-muted ms-auto';
+      timestamp.textContent = new Date(comment.timestamp).toLocaleString();
+      
+      buttonContainer.appendChild(likeButton);
+      buttonContainer.appendChild(dislikeButton);
+      buttonContainer.appendChild(timestamp);
+      
+      li.appendChild(commentContent);
+      li.appendChild(buttonContainer);
+      commentsList.appendChild(li);
+    });
+  } catch (error) {
+    console.error('Error loading comments:', error);
+    document.getElementById('commentsList').innerHTML = '<li class="list-group-item text-danger">Error loading comments. Please refresh the page.</li>';
+  }
 }
 
 // Like Comment
@@ -88,20 +129,71 @@ async function likeComment(commentId) {
     return;
   }
 
-  const response = await fetch('/like-comment', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ commentId }),
-  });
+  try {
+    const response = await fetch('/like-comment', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ commentId }),
+    });
 
-  if (response.ok) {
     const data = await response.json();
-    document.getElementById(`likes-${commentId}`).innerText = data.likes; // Update UI with new like count
-  } else {
-    alert('Error liking comment.');
+    
+    if (response.ok) {
+      // Update both like and dislike counts since backend handles mutual exclusivity
+      document.getElementById(`likes-${commentId}`).innerText = data.likes;
+      document.getElementById(`dislikes-${commentId}`).innerText = data.dislikes;
+    } else {
+      // Handle specific error messages from backend
+      if (data.error) {
+        alert(data.error);
+      } else {
+        alert('Error liking comment.');
+      }
+    }
+  } catch (error) {
+    console.error('Error liking comment:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+// Dislike Comment
+async function dislikeComment(commentId) {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    alert('You must be logged in to dislike a comment.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/dislike-comment', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ commentId }),
+    });
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      // Update both like and dislike counts since backend handles mutual exclusivity
+      document.getElementById(`likes-${commentId}`).innerText = data.likes;
+      document.getElementById(`dislikes-${commentId}`).innerText = data.dislikes;
+    } else {
+      // Handle specific error messages from backend
+      if (data.error) {
+        alert(data.error);
+      } else {
+        alert('Error disliking comment.');
+      }
+    }
+  } catch (error) {
+    console.error('Error disliking comment:', error);
+    alert('Network error. Please try again.');
   }
 }
 
@@ -116,36 +208,52 @@ document.getElementById('commentForm').addEventListener('submit', async (e) => {
     return;
   }
 
-  const response = await fetch('/comments', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ comment }),
-  });
+  if (!comment) {
+    alert('Comment cannot be empty.');
+    return;
+  }
 
-  if (response.ok) {
-    document.getElementById('comment').value = '';
-    localStorage.setItem('lastChecked', new Date().toISOString()); // Update last checked time
-    loadComments();
-  } else {
-    alert('Error posting comment.');
+  try {
+    const response = await fetch('/comments', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ comment }),
+    });
+
+    if (response.ok) {
+      document.getElementById('comment').value = '';
+      localStorage.setItem('lastChecked', new Date().toISOString()); // Update last checked time
+      loadComments(); // Reload comments to show the new one
+    } else {
+      const data = await response.json();
+      alert(data.error || 'Error posting comment.');
+    }
+  } catch (error) {
+    console.error('Error posting comment:', error);
+    alert('Network error. Please try again.');
   }
 });
 
 // Check for new comments since the last time the user posted
 async function checkNewComments() {
   const username = localStorage.getItem("username");
-  if (!username) return;
+  const token = localStorage.getItem("token");
+  
+  if (!username || !token) return;
 
   try {
     const response = await fetch(`/new-comments?username=${username}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem("token")}` }
+      headers: { 'Authorization': `Bearer ${token}` }
     });
+    
+    if (!response.ok) return;
+    
     const data = await response.json();
-
     const notificationBadge = document.getElementById('notificationBadge');
+    
     if (data.count > 0) {
       notificationBadge.innerText = `🔔 ${data.count} new comments since your last post!`;
       notificationBadge.classList.remove('d-none');
@@ -157,7 +265,6 @@ async function checkNewComments() {
   }
 }
 
-
-
-// Ensure likeComment is globally accessible
+// Ensure functions are globally accessible
 window.likeComment = likeComment;
+window.dislikeComment = dislikeComment;

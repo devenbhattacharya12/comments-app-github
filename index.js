@@ -43,13 +43,15 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// Comment Schema
+// Enhanced Comment Schema with Dislike Support
 const commentSchema = new mongoose.Schema({
   username: String,
   comment: String,
   timestamp: { type: Date, default: Date.now },
   likes: { type: Number, default: 0 },
-  likedBy: { type: [String], default: [] } // Track users who liked
+  dislikes: { type: Number, default: 0 }, // NEW: Track dislikes
+  likedBy: { type: [String], default: [] }, // Track users who liked
+  dislikedBy: { type: [String], default: [] } // NEW: Track users who disliked
 });
 const Comment = mongoose.model('Comment', commentSchema);
 
@@ -75,6 +77,7 @@ app.post('/register', async (req, res) => {
 
     res.status(201).json({ message: 'User registered successfully!' });
   } catch (err) {
+    console.error('Registration error:', err);
     res.status(500).json({ error: 'Failed to register user.' });
   }
 });
@@ -97,6 +100,7 @@ app.post('/login', async (req, res) => {
     const token = jwt.sign({ username: user.username }, SECRET_KEY, { expiresIn: '1h' });
     res.json({ message: 'Login successful!', token });
   } catch (err) {
+    console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed.' });
   }
 });
@@ -123,6 +127,7 @@ app.get('/comments', async (req, res) => {
     const comments = await Comment.find().sort({ timestamp: -1 });
     res.json(comments);
   } catch (err) {
+    console.error('Error fetching comments:', err);
     res.status(500).json({ error: 'Failed to fetch comments' });
   }
 });
@@ -148,14 +153,16 @@ app.post('/comments', authenticateToken, async (req, res) => {
 
     res.status(201).json({ message: 'Comment added!', comment: newComment });
   } catch (err) {
+    console.error('Error adding comment:', err);
     res.status(500).json({ error: 'Failed to add comment.' });
   }
 });
 
-// Like a Comment (Prevents Duplicate Likes)
+// Like a Comment (Prevents Duplicate Likes and Removes Dislike if Present)
 app.post('/like-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
+  
   try {
     const comment = await Comment.findById(commentId);
     if (!comment) {
@@ -166,13 +173,122 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'You have already liked this comment.' });
     }
 
+    // If user previously disliked, remove the dislike
+    if (comment.dislikedBy.includes(username)) {
+      comment.dislikes = Math.max(0, comment.dislikes - 1);
+      comment.dislikedBy = comment.dislikedBy.filter(user => user !== username);
+    }
+
+    // Add the like
     comment.likes += 1;
     comment.likedBy.push(username);
     await comment.save();
 
-    res.json({ message: 'Comment liked!', likes: comment.likes });
+    res.json({ 
+      message: 'Comment liked!', 
+      likes: comment.likes,
+      dislikes: comment.dislikes 
+    });
   } catch (err) {
+    console.error('Error liking comment:', err);
     res.status(500).json({ error: 'Failed to like comment.' });
+  }
+});
+
+// NEW: Dislike a Comment (Prevents Duplicate Dislikes and Removes Like if Present)
+app.post('/dislike-comment', authenticateToken, async (req, res) => {
+  const { commentId } = req.body;
+  const username = req.user.username;
+  
+  try {
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+
+    if (comment.dislikedBy.includes(username)) {
+      return res.status(400).json({ error: 'You have already disliked this comment.' });
+    }
+
+    // If user previously liked, remove the like
+    if (comment.likedBy.includes(username)) {
+      comment.likes = Math.max(0, comment.likes - 1);
+      comment.likedBy = comment.likedBy.filter(user => user !== username);
+    }
+
+    // Add the dislike
+    comment.dislikes += 1;
+    comment.dislikedBy.push(username);
+    await comment.save();
+
+    res.json({ 
+      message: 'Comment disliked!', 
+      likes: comment.likes,
+      dislikes: comment.dislikes 
+    });
+  } catch (err) {
+    console.error('Error disliking comment:', err);
+    res.status(500).json({ error: 'Failed to dislike comment.' });
+  }
+});
+
+// NEW: Remove Like from a Comment (For future toggle functionality)
+app.post('/unlike-comment', authenticateToken, async (req, res) => {
+  const { commentId } = req.body;
+  const username = req.user.username;
+  
+  try {
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+
+    if (!comment.likedBy.includes(username)) {
+      return res.status(400).json({ error: 'You have not liked this comment.' });
+    }
+
+    comment.likes = Math.max(0, comment.likes - 1);
+    comment.likedBy = comment.likedBy.filter(user => user !== username);
+    await comment.save();
+
+    res.json({ 
+      message: 'Like removed!', 
+      likes: comment.likes,
+      dislikes: comment.dislikes 
+    });
+  } catch (err) {
+    console.error('Error removing like:', err);
+    res.status(500).json({ error: 'Failed to remove like.' });
+  }
+});
+
+// NEW: Remove Dislike from a Comment (For future toggle functionality)
+app.post('/undislike-comment', authenticateToken, async (req, res) => {
+  const { commentId } = req.body;
+  const username = req.user.username;
+  
+  try {
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found.' });
+    }
+
+    if (!comment.dislikedBy.includes(username)) {
+      return res.status(400).json({ error: 'You have not disliked this comment.' });
+    }
+
+    comment.dislikes = Math.max(0, comment.dislikes - 1);
+    comment.dislikedBy = comment.dislikedBy.filter(user => user !== username);
+    await comment.save();
+
+    res.json({ 
+      message: 'Dislike removed!', 
+      likes: comment.likes,
+      dislikes: comment.dislikes 
+    });
+  } catch (err) {
+    console.error('Error removing dislike:', err);
+    res.status(500).json({ error: 'Failed to remove dislike.' });
   }
 });
 
@@ -198,10 +314,10 @@ app.get('/new-comments', authenticateToken, async (req, res) => {
 
     res.json({ newComments, count: newComments.length });
   } catch (err) {
+    console.error('Error checking new comments:', err);
     res.status(500).json({ error: 'Failed to check new comments.' });
   }
 });
-
 
 // Start the server
 app.listen(PORT, () => {
