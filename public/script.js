@@ -22,10 +22,8 @@ function checkLoginStatus() {
   if (token && username) {
     console.log('User is logged in, updating UI...');
     document.getElementById('authSection').classList.add('d-none');
-    
-    if (navSection) navSection.classList.remove('d-none');
-    if (commentSection) commentSection.classList.remove('d-none');
-    if (welcomeMessage) welcomeMessage.textContent = `Welcome, @${username}!`;
+    document.getElementById('logoutButton').classList.remove('d-none');
+    document.getElementById('commentSection').classList.remove('d-none');
     
     console.log('UI updated for logged in user');
   } else {
