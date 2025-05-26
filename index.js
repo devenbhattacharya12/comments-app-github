@@ -1,12 +1,10 @@
-// index.js (Backend) - Safe Space App with Enhanced Features
+// index.js (Backend) - Safe Space App
 require('dotenv').config(); // Load environment variables
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcrypt'); // Hash passwords
 const jwt = require('jsonwebtoken'); // Secure authentication
-const multer = require('multer'); // File upload handling
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,42 +30,17 @@ mongoose.connect(MONGO_URI, {
     process.exit(1);
   });
 
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'public/uploads/');
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'), false);
-    }
-  }
-});
-
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// User Schema with Password Hashing and Notifications
+// User Schema with Password Hashing
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
   password: { type: String, required: true }, // Store hashed passwords
   lastPostedAt: { type: Date, default: null },
+  // NEW: Add notifications array
   notifications: [{
     type: { type: String, enum: ['tag', 'reply'], required: true },
     commentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Comment' },
@@ -79,7 +52,7 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// Enhanced Comment Schema with Replies, Media, and Tags
+// Enhanced Comment Schema with NEW FIELDS but keeping it simple
 const commentSchema = new mongoose.Schema({
   username: String,
   comment: String,
@@ -88,13 +61,11 @@ const commentSchema = new mongoose.Schema({
   dislikes: { type: Number, default: 0 },
   likedBy: { type: [String], default: [] },
   dislikedBy: { type: [String], default: [] },
-  // NEW: Media support
+  // NEW: Add these fields but make them optional
   mediaUrl: { type: String, default: null },
   mediaType: { type: String, enum: ['image', 'gif'], default: null },
-  // NEW: Reply support
   parentCommentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Comment', default: null },
   replies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }],
-  // NEW: Tagged users
   taggedUsers: { type: [String], default: [] }
 });
 const Comment = mongoose.model('Comment', commentSchema);
@@ -200,14 +171,13 @@ async function createTagNotifications(taggedUsers, commentId, fromUser) {
   }
 }
 
-// Fetch All Comments with Replies
+// Fetch All Comments
 app.get('/comments', async (req, res) => {
   try {
-    // Get top-level comments (no parent) with their replies
+    // For now, get all comments and populate replies
     const comments = await Comment.find({ parentCommentId: null })
       .populate('replies')
       .sort({ timestamp: -1 });
-    
     res.json(comments);
   } catch (err) {
     console.error('Error fetching comments:', err);
@@ -215,20 +185,8 @@ app.get('/comments', async (req, res) => {
   }
 });
 
-// Get replies for a specific comment
-app.get('/comments/:commentId/replies', async (req, res) => {
-  try {
-    const replies = await Comment.find({ parentCommentId: req.params.commentId })
-      .sort({ timestamp: 1 });
-    res.json(replies);
-  } catch (err) {
-    console.error('Error fetching replies:', err);
-    res.status(500).json({ error: 'Failed to fetch replies' });
-  }
-});
-
-// Add a New Comment or Reply (with optional media upload)
-app.post('/comments', authenticateToken, upload.single('media'), async (req, res) => {
+// Add a New Comment (MODIFIED to handle optional new fields)
+app.post('/comments', authenticateToken, async (req, res) => {
   const { comment, parentCommentId } = req.body;
   const username = req.user.username;
 
@@ -240,18 +198,12 @@ app.post('/comments', authenticateToken, upload.single('media'), async (req, res
     // Extract tagged users
     const taggedUsers = extractTaggedUsers(comment);
     
-    // Prepare comment data
+    // Create comment data
     const commentData = {
       username,
       comment,
       taggedUsers
     };
-
-    // Add media if uploaded
-    if (req.file) {
-      commentData.mediaUrl = `/uploads/${req.file.filename}`;
-      commentData.mediaType = req.file.mimetype.includes('gif') ? 'gif' : 'image';
-    }
 
     // Add parent comment ID if this is a reply
     if (parentCommentId) {
@@ -292,7 +244,6 @@ app.post('/comments', authenticateToken, upload.single('media'), async (req, res
       await createTagNotifications(taggedUsers, newComment._id, username);
     }
 
-    // Update user's last posted time
     await User.findOneAndUpdate(
       { username },
       { lastPostedAt: new Date() },
@@ -343,7 +294,7 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
   }
 });
 
-// Dislike a Comment (Prevents Duplicate Dislikes and Removes Like if Present)
+// NEW: Dislike a Comment (Prevents Duplicate Dislikes and Removes Like if Present)
 app.post('/dislike-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
@@ -380,7 +331,7 @@ app.post('/dislike-comment', authenticateToken, async (req, res) => {
   }
 });
 
-// Remove Like from a Comment
+// NEW: Remove Like from a Comment (For future toggle functionality)
 app.post('/unlike-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
@@ -410,7 +361,7 @@ app.post('/unlike-comment', authenticateToken, async (req, res) => {
   }
 });
 
-// Remove Dislike from a Comment
+// NEW: Remove Dislike from a Comment (For future toggle functionality)
 app.post('/undislike-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
@@ -437,6 +388,18 @@ app.post('/undislike-comment', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error removing dislike:', err);
     res.status(500).json({ error: 'Failed to remove dislike.' });
+  }
+});
+
+// Get replies for a specific comment
+app.get('/comments/:commentId/replies', async (req, res) => {
+  try {
+    const replies = await Comment.find({ parentCommentId: req.params.commentId })
+      .sort({ timestamp: 1 });
+    res.json(replies);
+  } catch (err) {
+    console.error('Error fetching replies:', err);
+    res.status(500).json({ error: 'Failed to fetch replies' });
   }
 });
 
