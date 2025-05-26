@@ -1,10 +1,13 @@
-// Enhanced script.js - Step 2: Adding Replies and Tagging
-console.log('Enhanced script loaded - Step 2');
+// Social Media Platform Script - Based on your working script + new features
+console.log('Social Media Platform loaded - preserving all existing features');
+
+// Social media state
+let currentView = 'mainFeed';
+let currentNest = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded');
   checkLoginStatus();
-  loadComments();
   
   // Check for new comments every 10 seconds
   setInterval(() => {
@@ -16,35 +19,50 @@ document.addEventListener('DOMContentLoaded', () => {
     checkNotifications();
   }, 30000);
   
-  // Add notification toggle event listener
+  // Setup social media navigation with delay
   setTimeout(() => {
-    const notificationsToggle = document.getElementById('notificationsToggle');
-    if (notificationsToggle) {
-      console.log('Adding notification toggle event listener');
-      notificationsToggle.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('Notification toggle clicked');
-        toggleNotificationsPanel();
-      });
-    } else {
-      console.log('Notifications toggle not found');
-    }
-    
-    // Add mark all read event listener
-    const markAllRead = document.getElementById('markAllRead');
-    if (markAllRead) {
-      console.log('Adding mark all read event listener');
-      markAllRead.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        markAllNotificationsAsRead();
-      });
-    }
-  }, 1000); // Wait 1 second for elements to be available
+    setupSocialMediaNavigation();
+  }, 1000);
 });
 
-// Check Login Status
+// Setup social media navigation (NEW)
+function setupSocialMediaNavigation() {
+  // Add mark all read event listener
+  const markAllRead = document.getElementById('markAllRead');
+  if (markAllRead) {
+    console.log('Adding mark all read event listener');
+    markAllRead.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      markAllNotificationsAsRead();
+    });
+  }
+
+  // Logout button
+  const logoutButton = document.getElementById('logoutButton');
+  if (logoutButton) {
+    logoutButton.addEventListener('click', logout);
+  }
+
+  // Form submissions - handle both old and new forms
+  const registerForm = document.getElementById('registerForm');
+  const loginForm = document.getElementById('loginForm');
+  const commentForm = document.getElementById('commentForm');
+
+  if (registerForm) {
+    registerForm.addEventListener('submit', handleRegister);
+  }
+  if (loginForm) {
+    loginForm.addEventListener('submit', handleLogin);
+  }
+  if (commentForm) {
+    commentForm.addEventListener('submit', handleCommentSubmit);
+  }
+}
+
+// ================== AUTHENTICATION (ENHANCED) ==================
+
+// Check Login Status (ENHANCED for social media layout)
 function checkLoginStatus() {
   console.log('Checking login status...');
   const token = localStorage.getItem('token');
@@ -55,14 +73,45 @@ function checkLoginStatus() {
   
   if (token && username) {
     console.log('User is logged in, updating UI...');
-    document.getElementById('authSection').classList.add('d-none');
-    document.getElementById('userMenuSection').classList.remove('d-none');
-    document.getElementById('commentSection').classList.remove('d-none');
     
-    // Set welcome message
-    const welcomeMessage = document.getElementById('welcomeMessage');
-    if (welcomeMessage) {
-      welcomeMessage.textContent = `Welcome, @${username}!`;
+    // Check if we're using the new social media layout or old layout
+    const authContainer = document.getElementById('authContainer');
+    const mainApp = document.getElementById('mainApp');
+    const authSection = document.getElementById('authSection');
+    const userMenuSection = document.getElementById('userMenuSection');
+    const commentSection = document.getElementById('commentSection');
+    
+    if (authContainer && mainApp) {
+      // NEW social media layout
+      authContainer.classList.add('d-none');
+      mainApp.classList.remove('d-none');
+      
+      // Set username in sidebar
+      const sidebarUsername = document.getElementById('sidebarUsername');
+      if (sidebarUsername) {
+        sidebarUsername.textContent = `@${username}`;
+      }
+      
+      // Load initial data
+      loadMainFeed();
+      loadUserNests();
+    } else if (authSection && userMenuSection && commentSection) {
+      // OLD layout compatibility
+      authSection.classList.add('d-none');
+      userMenuSection.classList.remove('d-none');
+      commentSection.classList.remove('d-none');
+      
+      // Set welcome message
+      const welcomeMessage = document.getElementById('welcomeMessage');
+      if (welcomeMessage) {
+        welcomeMessage.textContent = `Welcome, @${username}!`;
+      }
+      
+      // Load comments using old method
+      loadComments();
+    } else {
+      // Fallback: just load comments
+      loadComments();
     }
     
     // Check for notifications on login
@@ -71,11 +120,20 @@ function checkLoginStatus() {
     console.log('UI updated for logged in user');
   } else {
     console.log('User not logged in');
+    
+    // Show appropriate auth UI
+    const authContainer = document.getElementById('authContainer');
+    const mainApp = document.getElementById('mainApp');
+    
+    if (authContainer && mainApp) {
+      authContainer.classList.remove('d-none');
+      mainApp.classList.add('d-none');
+    }
   }
 }
 
-// Handle User Registration
-document.getElementById('registerForm').addEventListener('submit', async (e) => {
+// Handle User Registration (ENHANCED)
+async function handleRegister(e) {
   e.preventDefault();
   console.log('Register form submitted');
   
@@ -105,10 +163,10 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     console.error('Registration network error:', error);
     alert('Network error during registration');
   }
-});
+}
 
-// Handle User Login
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
+// Handle User Login (ENHANCED)
+async function handleLogin(e) {
   e.preventDefault();
   console.log('Login form submitted');
   
@@ -137,8 +195,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       
       console.log('Token stored, checking login status...');
       checkLoginStatus();
-      console.log('Loading comments...');
-      loadComments();
     } else {
       console.error('Login failed:', data);
       alert(data.error || 'Login failed.');
@@ -147,18 +203,69 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     console.error('Login network error:', error);
     alert('Network error during login');
   }
-});
+}
 
-// Logout User
-document.getElementById('logoutButton').addEventListener('click', () => {
+// Logout User (ENHANCED)
+function logout() {
   console.log('Logging out...');
   localStorage.removeItem('token');
   localStorage.removeItem('username');
   localStorage.removeItem('lastChecked');
   window.location.reload();
-});
+}
 
-// Format comment text with tagged users and clickable links
+// ================== SOCIAL MEDIA NAVIGATION (NEW) ==================
+
+// Show Main Feed
+function showMainFeed() {
+  console.log('Switching to Main Feed');
+  currentView = 'mainFeed';
+  currentNest = null;
+  
+  // Update navigation
+  document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+  const mainFeedNav = document.getElementById('mainFeedNav');
+  if (mainFeedNav) mainFeedNav.classList.add('active');
+  
+  // Show/hide views
+  const mainFeedView = document.getElementById('mainFeedView');
+  const nestsView = document.getElementById('nestsView');
+  const notificationsPanel = document.getElementById('notificationsPanel');
+  
+  if (mainFeedView) mainFeedView.classList.remove('d-none');
+  if (nestsView) nestsView.classList.add('d-none');
+  if (notificationsPanel) notificationsPanel.style.display = 'none';
+  
+  // Load main feed
+  loadMainFeed();
+}
+
+// Show Nests
+function showNests() {
+  console.log('Switching to Nests');
+  currentView = 'nests';
+  
+  // Update navigation
+  document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+  const nestsNav = document.getElementById('nestsNav');
+  if (nestsNav) nestsNav.classList.add('active');
+  
+  // Show/hide views
+  const mainFeedView = document.getElementById('mainFeedView');
+  const nestsView = document.getElementById('nestsView');
+  const notificationsPanel = document.getElementById('notificationsPanel');
+  
+  if (mainFeedView) mainFeedView.classList.add('d-none');
+  if (nestsView) nestsView.classList.remove('d-none');
+  if (notificationsPanel) notificationsPanel.style.display = 'none';
+  
+  // Load nests
+  loadUserNests();
+}
+
+// ================== COMMENTS/POSTS (ALL PRESERVED FROM YOUR SCRIPT) ==================
+
+// Format comment text with tagged users and clickable links (PRESERVED)
 function formatCommentText(text) {
   // First, make URLs clickable
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -170,7 +277,7 @@ function formatCommentText(text) {
   return formattedText;
 }
 
-// Load Comments with Replies
+// Load Comments (PRESERVED - your original function)
 async function loadComments() {
   console.log('Loading comments...');
   try {
@@ -209,7 +316,46 @@ async function loadComments() {
   }
 }
 
-// Create comment element with reply support
+// Load Main Feed (NEW - same as loadComments but for social media layout)
+async function loadMainFeed() {
+  console.log('Loading main feed...');
+  try {
+    const response = await fetch('/comments');
+    console.log('Main feed response status:', response.status);
+    
+    const comments = await response.json();
+    console.log('Received main feed comments:', comments.length);
+    
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) {
+      console.error('Comments list element not found!');
+      return;
+    }
+    
+    commentsList.innerHTML = '';
+
+    if (comments.length === 0) {
+      commentsList.innerHTML = '<li class="list-group-item text-muted text-center">No thoughts yet... be the first to share!</li>';
+      return;
+    }
+
+    comments.forEach(comment => {
+      console.log('Processing comment:', comment._id);
+      const li = createCommentElement(comment);
+      commentsList.appendChild(li);
+    });
+    
+    console.log('Main feed loaded successfully');
+  } catch (error) {
+    console.error('Error loading main feed:', error);
+    const commentsList = document.getElementById('commentsList');
+    if (commentsList) {
+      commentsList.innerHTML = '<li class="list-group-item text-danger">Error loading comments. Please refresh the page.</li>';
+    }
+  }
+}
+
+// Create comment element (PRESERVED from your script)
 function createCommentElement(comment) {
   const li = document.createElement('li');
   li.classList.add('list-group-item');
@@ -257,7 +403,7 @@ function createCommentElement(comment) {
   li.appendChild(commentContent);
   li.appendChild(buttonContainer);
 
-  // Add replies if they exist
+  // Add replies if they exist (PRESERVED)
   if (comment.replies && comment.replies.length > 0) {
     const repliesSection = document.createElement('div');
     repliesSection.className = 'replies-section mt-3 ms-4';
@@ -298,7 +444,71 @@ function createCommentElement(comment) {
   return li;
 }
 
-// Show reply form
+// Handle Comment Submit (ENHANCED to work with both layouts)
+async function handleCommentSubmit(e) {
+  e.preventDefault();
+  console.log('Comment form submitted');
+  
+  const token = localStorage.getItem('token');
+  const comment = document.getElementById('comment').value.trim();
+
+  if (!token) {
+    alert('You must be logged in to comment.');
+    return;
+  }
+
+  if (!comment) {
+    alert('Comment cannot be empty.');
+    return;
+  }
+
+  try {
+    const postData = { comment };
+    
+    // If in a nest, add nestId
+    if (currentNest) {
+      postData.nestId = currentNest;
+    }
+
+    const response = await fetch('/comments', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(postData),
+    });
+
+    console.log('Comment post response status:', response.status);
+
+    if (response.ok) {
+      document.getElementById('comment').value = '';
+      localStorage.setItem('lastChecked', new Date().toISOString());
+      
+      // Reload appropriate view
+      if (currentView === 'mainFeed' || !currentView) {
+        if (document.getElementById('mainFeedView')) {
+          loadMainFeed();
+        } else {
+          loadComments(); // Fallback to old method
+        }
+      } else if (currentNest) {
+        loadNestFeed(currentNest);
+      }
+      
+      console.log('Comment posted successfully');
+    } else {
+      const data = await response.json();
+      console.error('Comment post error:', data);
+      alert(data.error || 'Error posting comment.');
+    }
+  } catch (error) {
+    console.error('Comment post network error:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+// Show reply form (PRESERVED from your script)
 function showReplyForm(parentCommentId, parentUsername) {
   console.log('Showing reply form for comment:', parentCommentId);
   
@@ -323,9 +533,21 @@ function showReplyForm(parentCommentId, parentUsername) {
     </form>
   `;
   
-  // Insert after the comment section
-  const commentSection = document.getElementById('commentSection');
-  commentSection.parentNode.insertBefore(replyForm, commentSection.nextSibling);
+  // Insert after appropriate section - check for both old and new layouts
+  let targetSection = document.getElementById('commentSection'); // Old layout
+  if (!targetSection) {
+    targetSection = document.getElementById('mainFeedView'); // New layout
+  }
+  if (!targetSection) {
+    targetSection = document.getElementById('currentNestFeed'); // Nest view
+  }
+  
+  if (targetSection) {
+    targetSection.parentNode.insertBefore(replyForm, targetSection.nextSibling);
+  } else {
+    // Fallback: append to body
+    document.body.appendChild(replyForm);
+  }
   
   // Add event listener for the reply form
   document.getElementById('replyFormElement').addEventListener('submit', async (e) => {
@@ -340,7 +562,7 @@ function showReplyForm(parentCommentId, parentUsername) {
   replyForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// Hide reply form
+// Hide reply form (PRESERVED)
 function hideReplyForm() {
   const replyForm = document.getElementById('replyForm');
   if (replyForm) {
@@ -348,7 +570,7 @@ function hideReplyForm() {
   }
 }
 
-// Post Reply
+// Post Reply (PRESERVED from your script)
 async function postReply(parentCommentId) {
   const token = localStorage.getItem('token');
   const replyText = document.getElementById('replyText').value.trim();
@@ -366,23 +588,41 @@ async function postReply(parentCommentId) {
   }
 
   try {
+    const postData = { 
+      comment: replyText,
+      parentCommentId: parentCommentId 
+    };
+    
+    // If in a nest, add nestId
+    if (currentNest) {
+      postData.nestId = currentNest;
+    }
+
     const response = await fetch('/comments', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ 
-        comment: replyText,
-        parentCommentId: parentCommentId 
-      }),
+      body: JSON.stringify(postData),
     });
 
     console.log('Reply post response status:', response.status);
 
     if (response.ok) {
       hideReplyForm();
-      loadComments(); // Reload to show the new reply
+      
+      // Reload appropriate view
+      if (currentView === 'mainFeed' || !currentView) {
+        if (document.getElementById('mainFeedView')) {
+          loadMainFeed();
+        } else {
+          loadComments(); // Fallback to old method
+        }
+      } else if (currentNest) {
+        loadNestFeed(currentNest);
+      }
+      
       console.log('Reply posted successfully');
     } else {
       const data = await response.json();
@@ -395,7 +635,7 @@ async function postReply(parentCommentId) {
   }
 }
 
-// Like Comment
+// Like Comment (PRESERVED from your script)
 async function likeComment(commentId) {
   console.log('Liking comment:', commentId);
   const token = localStorage.getItem('token');
@@ -432,7 +672,7 @@ async function likeComment(commentId) {
   }
 }
 
-// Dislike Comment
+// Dislike Comment (PRESERVED from your script)
 async function dislikeComment(commentId) {
   console.log('Disliking comment:', commentId);
   const token = localStorage.getItem('token');
@@ -469,56 +709,9 @@ async function dislikeComment(commentId) {
   }
 }
 
-// Post Comment
-const commentForm = document.getElementById('commentForm');
-if (commentForm) {
-  commentForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    console.log('Comment form submitted');
-    
-    const token = localStorage.getItem('token');
-    const comment = document.getElementById('comment').value.trim();
+// ================== NOTIFICATIONS (ALL PRESERVED FROM YOUR SCRIPT) ==================
 
-    if (!token) {
-      alert('You must be logged in to comment.');
-      return;
-    }
-
-    if (!comment) {
-      alert('Comment cannot be empty.');
-      return;
-    }
-
-    try {
-      const response = await fetch('/comments', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ comment }),
-      });
-
-      console.log('Comment post response status:', response.status);
-
-      if (response.ok) {
-        document.getElementById('comment').value = '';
-        localStorage.setItem('lastChecked', new Date().toISOString());
-        loadComments();
-        console.log('Comment posted successfully');
-      } else {
-        const data = await response.json();
-        console.error('Comment post error:', data);
-        alert(data.error || 'Error posting comment.');
-      }
-    } catch (error) {
-      console.error('Comment post network error:', error);
-      alert('Network error. Please try again.');
-    }
-  });
-}
-
-// Check for notifications
+// Check for notifications (PRESERVED)
 async function checkNotifications() {
   const token = localStorage.getItem('token');
   if (!token) return;
@@ -533,6 +726,8 @@ async function checkNotifications() {
       console.log('Unread notifications:', data.count);
       
       const badge = document.getElementById('notificationCount');
+      if (!badge) return; // Badge doesn't exist in old layout
+      
       const currentCount = parseInt(badge.textContent) || 0;
       
       if (data.count > 0) {
@@ -552,9 +747,10 @@ async function checkNotifications() {
   }
 }
 
-// Show notification toast
+// Show notification toast (PRESERVED)
 function showNotificationToast(message) {
   const toastContainer = document.getElementById('notificationToast');
+  if (!toastContainer) return; // Toast container doesn't exist in old layout
   
   const toast = document.createElement('div');
   toast.className = 'alert alert-info alert-dismissible fade show';
@@ -573,10 +769,11 @@ function showNotificationToast(message) {
   }, 5000);
 }
 
-// Toggle notifications panel
+// Toggle notifications panel (PRESERVED from your script)
 function toggleNotificationsPanel() {
   console.log('Toggling notifications panel');
   const panel = document.getElementById('notificationsPanel');
+  if (!panel) return;
   
   const isHidden = panel.style.display === 'none' || panel.style.display === '';
   console.log('Panel display style:', panel.style.display);
@@ -586,38 +783,30 @@ function toggleNotificationsPanel() {
     console.log('Opening notifications panel');
     panel.style.display = 'block';
     loadNotifications();
+    
+    // Update navigation for social media layout
+    const navItems = document.querySelectorAll('.nav-item');
+    const notificationsNav = document.getElementById('notificationsNav');
+    if (navItems.length > 0 && notificationsNav) {
+      navItems.forEach(item => item.classList.remove('active'));
+      notificationsNav.classList.add('active');
+    }
   } else {
     console.log('Closing notifications panel');
     panel.style.display = 'none';
+    
+    // Restore previous navigation state
+    const mainFeedNav = document.getElementById('mainFeedNav');
+    const nestsNav = document.getElementById('nestsNav');
+    if (currentView === 'mainFeed' && mainFeedNav) {
+      mainFeedNav.classList.add('active');
+    } else if (currentView === 'nests' && nestsNav) {
+      nestsNav.classList.add('active');
+    }
   }
 }
 
-// Toggle notifications panel
-document.addEventListener('DOMContentLoaded', () => {
-  // ... existing code ...
-  
-  // Add notification toggle event listener
-  const notificationsToggle = document.getElementById('notificationsToggle');
-  if (notificationsToggle) {
-    notificationsToggle.addEventListener('click', () => {
-      const panel = document.getElementById('notificationsPanel');
-      if (panel.classList.contains('d-none')) {
-        panel.classList.remove('d-none');
-        loadNotifications();
-      } else {
-        panel.classList.add('d-none');
-      }
-    });
-  }
-  
-  // Add mark all read event listener
-  const markAllRead = document.getElementById('markAllRead');
-  if (markAllRead) {
-    markAllRead.addEventListener('click', markAllNotificationsAsRead);
-  }
-});
-
-// Load notifications
+// Load notifications (PRESERVED)
 async function loadNotifications() {
   console.log('Loading notifications...');
   const token = localStorage.getItem('token');
@@ -640,10 +829,11 @@ async function loadNotifications() {
   }
 }
 
-// Display notifications
+// Display notifications (PRESERVED)
 function displayNotifications(notifications) {
   console.log('Displaying notifications:', notifications);
   const notificationsList = document.getElementById('notificationsList');
+  if (!notificationsList) return;
   
   if (notifications.length === 0) {
     notificationsList.innerHTML = '<div class="p-3 text-center text-muted">No notifications</div>';
@@ -653,14 +843,14 @@ function displayNotifications(notifications) {
   notificationsList.innerHTML = notifications.map(notification => `
     <div class="notification-item ${!notification.read ? 'unread' : ''}" 
          onclick="markNotificationAsRead('${notification._id}')" 
-         style="cursor: pointer;">
+         style="cursor: pointer; padding: 12px; border-bottom: 1px solid #dee2e6; ${!notification.read ? 'background-color: #e3f2fd; border-left: 4px solid #1DA1F2;' : ''}">
       <div class="d-flex justify-content-between align-items-start">
         <div class="flex-grow-1">
           <div>
             <i class="fas fa-${notification.type === 'tag' ? 'at' : 'reply'} me-2"></i>
             <strong>${notification.message}</strong>
           </div>
-          <div class="notification-time">${new Date(notification.timestamp).toLocaleString()}</div>
+          <div style="font-size: 0.8rem; color: #6c757d;">${new Date(notification.timestamp).toLocaleString()}</div>
         </div>
         ${!notification.read ? '<span class="badge bg-primary ms-2">New</span>' : ''}
       </div>
@@ -668,7 +858,7 @@ function displayNotifications(notifications) {
   `).join('');
 }
 
-// Mark single notification as read
+// Mark single notification as read (PRESERVED)
 async function markNotificationAsRead(notificationId) {
   console.log('Marking notification as read:', notificationId);
   const token = localStorage.getItem('token');
@@ -692,7 +882,7 @@ async function markNotificationAsRead(notificationId) {
   }
 }
 
-// Mark all notifications as read
+// Mark all notifications as read (PRESERVED)
 async function markAllNotificationsAsRead() {
   console.log('Marking all notifications as read');
   const token = localStorage.getItem('token');
@@ -723,7 +913,7 @@ async function markAllNotificationsAsRead() {
   }
 }
 
-// Check for new comments since the user's last post
+// Check for new comments since the user's last post (PRESERVED)
 async function checkNewComments() {
   const username = localStorage.getItem("username");
   const token = localStorage.getItem("token");
@@ -751,7 +941,360 @@ async function checkNewComments() {
   }
 }
 
-// Make functions globally accessible
+// ================== NESTS FUNCTIONALITY (NEW) ==================
+
+async function loadUserNests() {
+  console.log('Loading user nests...');
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch('/nests', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const nests = await response.json();
+      console.log('Loaded nests:', nests.length);
+      displayUserNests(nests);
+    } else {
+      console.error('Failed to load nests:', response.status);
+    }
+  } catch (error) {
+    console.error('Error loading nests:', error);
+  }
+}
+
+function displayUserNests(nests) {
+  const nestsList = document.getElementById('nestsList');
+  if (!nestsList) return; // Nests list doesn't exist in old layout
+  
+  if (nests.length === 0) {
+    nestsList.innerHTML = '<div style="color: rgba(255,255,255,0.7); font-size: 12px; text-align: center; padding: 10px;">No nests yet</div>';
+    return;
+  }
+
+  nestsList.innerHTML = nests.map(nest => `
+    <div class="nest-item ${currentNest === nest._id ? 'active' : ''}" onclick="selectNest('${nest._id}', '${nest.name}')">
+      <div class="flex-grow-1">
+        <div style="font-weight: 500;">${nest.name}</div>
+        <div class="nest-members">${nest.members.length} member${nest.members.length !== 1 ? 's' : ''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectNest(nestId, nestName) {
+  console.log('Selecting nest:', nestName);
+  currentNest = nestId;
+  
+  // Update nest items
+  document.querySelectorAll('.nest-item').forEach(item => item.classList.remove('active'));
+  if (event && event.currentTarget) {
+    event.currentTarget.classList.add('active');
+  }
+  
+  // Switch to nests view if not already there
+  if (currentView !== 'nests') {
+    showNests();
+  }
+  
+  // Load nest feed
+  loadNestFeed(nestId, nestName);
+}
+
+async function loadNestFeed(nestId, nestName) {
+  console.log('Loading nest feed:', nestName);
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch(`/nests/${nestId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Loaded nest data:', data);
+      displayNestFeed(data.nest, data.posts);
+    } else {
+      console.error('Failed to load nest feed:', response.status);
+    }
+  } catch (error) {
+    console.error('Error loading nest feed:', error);
+  }
+}
+
+function displayNestFeed(nest, posts) {
+  const currentNestFeed = document.getElementById('currentNestFeed');
+  if (!currentNestFeed) return; // Current nest feed doesn't exist in old layout
+  
+  currentNestFeed.innerHTML = `
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">
+          <i class="fas fa-users me-2"></i>${nest.name}
+        </h5>
+        <small class="text-muted">${nest.description || 'No description'}</small>
+        <div class="mt-2">
+          <span class="badge bg-primary">${nest.members.length} members</span>
+          <span class="badge bg-secondary">${nest.privacy}</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <form id="nestCommentForm">
+          <textarea class="form-control mb-3" id="nestComment" rows="3" placeholder="Share with ${nest.name}... (Use @username to tag someone)" required></textarea>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-paper-plane me-2"></i>Post to Nest
+          </button>
+        </form>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h6 class="mb-0">Nest Posts</h6>
+      </div>
+      <div class="card-body p-0">
+        <ul id="nestPostsList" class="list-group list-group-flush"></ul>
+      </div>
+    </div>
+  `;
+  
+  // Add event listener for nest comment form
+  document.getElementById('nestCommentForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await handleNestCommentSubmit(nest._id);
+  });
+  
+  // Display posts
+  const nestPostsList = document.getElementById('nestPostsList');
+  
+  if (posts.length === 0) {
+    nestPostsList.innerHTML = '<li class="list-group-item text-muted text-center">No posts in this nest yet... start the conversation!</li>';
+    return;
+  }
+
+  nestPostsList.innerHTML = '';
+  posts.forEach(post => {
+    const li = createCommentElement(post);
+    nestPostsList.appendChild(li);
+  });
+}
+
+async function handleNestCommentSubmit(nestId) {
+  const token = localStorage.getItem('token');
+  const comment = document.getElementById('nestComment').value.trim();
+
+  if (!token) {
+    alert('You must be logged in to post.');
+    return;
+  }
+
+  if (!comment) {
+    alert('Post cannot be empty.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/comments', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ 
+        comment,
+        nestId: nestId 
+      }),
+    });
+
+    if (response.ok) {
+      document.getElementById('nestComment').value = '';
+      loadNestFeed(nestId);
+      console.log('Nest comment posted successfully');
+    } else {
+      const data = await response.json();
+      console.error('Nest comment post error:', data);
+      alert(data.error || 'Error posting to nest.');
+    }
+  } catch (error) {
+    console.error('Nest comment post network error:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+// ================== NEST MANAGEMENT (NEW) ==================
+
+function showCreateNestModal() {
+  const modal = new bootstrap.Modal(document.getElementById('createNestModal'));
+  modal.show();
+}
+
+function showJoinNestModal() {
+  const modal = new bootstrap.Modal(document.getElementById('joinNestModal'));
+  modal.show();
+  loadAvailableNests();
+}
+
+async function createNest() {
+  const token = localStorage.getItem('token');
+  const name = document.getElementById('nestName').value.trim();
+  const description = document.getElementById('nestDescription').value.trim();
+  const privacy = document.querySelector('input[name="nestPrivacy"]:checked').value;
+
+  if (!token) {
+    alert('You must be logged in to create a nest.');
+    return;
+  }
+
+  if (!name) {
+    alert('Nest name is required.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/nests', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ name, description, privacy }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Nest created:', data);
+      
+      // Close modal and reset form
+      bootstrap.Modal.getInstance(document.getElementById('createNestModal')).hide();
+      document.getElementById('createNestForm').reset();
+      
+      // Reload nests
+      loadUserNests();
+      
+      alert('Nest created successfully!');
+    } else {
+      const data = await response.json();
+      alert(data.error || 'Error creating nest.');
+    }
+  } catch (error) {
+    console.error('Error creating nest:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+async function loadAvailableNests() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch('/nests/discover', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const nests = await response.json();
+      displayAvailableNests(nests);
+    }
+  } catch (error) {
+    console.error('Error loading available nests:', error);
+  }
+}
+
+function displayAvailableNests(nests) {
+  const availableNests = document.getElementById('availableNests');
+  if (!availableNests) return;
+  
+  if (nests.length === 0) {
+    availableNests.innerHTML = '<div class="text-center text-muted py-3">No public nests available to join</div>';
+    return;
+  }
+
+  availableNests.innerHTML = nests.map(nest => `
+    <div class="card mb-2">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h6 class="mb-1">${nest.name}</h6>
+            <small class="text-muted">${nest.description || 'No description'}</small>
+            <div class="mt-1">
+              <span class="badge bg-light text-dark">${nest.members.length} members</span>
+            </div>
+          </div>
+          <button class="btn btn-outline-primary btn-sm" onclick="joinNest('${nest._id}')">
+            Join
+          </button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function joinNest(nestId) {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch(`/nests/${nestId}/join`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      alert('Successfully joined the nest!');
+      loadUserNests();
+      loadAvailableNests(); // Refresh available nests
+    } else {
+      const data = await response.json();
+      alert(data.error || 'Error joining nest.');
+    }
+  } catch (error) {
+    console.error('Error joining nest:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+// ================== COMPATIBILITY LAYER (OLD SCRIPT SUPPORT) ==================
+
+// Support for old script.js event listeners that were added directly to DOM elements
+document.addEventListener('DOMContentLoaded', () => {
+  // Add delay to ensure elements exist
+  setTimeout(() => {
+    // Legacy support for old registration form
+    const oldRegisterForm = document.getElementById('registerForm');
+    if (oldRegisterForm && !oldRegisterForm.dataset.listenerAdded) {
+      oldRegisterForm.addEventListener('submit', handleRegister);
+      oldRegisterForm.dataset.listenerAdded = 'true';
+    }
+
+    // Legacy support for old login form
+    const oldLoginForm = document.getElementById('loginForm');
+    if (oldLoginForm && !oldLoginForm.dataset.listenerAdded) {
+      oldLoginForm.addEventListener('submit', handleLogin);
+      oldLoginForm.dataset.listenerAdded = 'true';
+    }
+
+    // Legacy support for old comment form
+    const oldCommentForm = document.getElementById('commentForm');
+    if (oldCommentForm && !oldCommentForm.dataset.listenerAdded) {
+      oldCommentForm.addEventListener('submit', handleCommentSubmit);
+      oldCommentForm.dataset.listenerAdded = 'true';
+    }
+
+    // Legacy support for old logout button
+    const oldLogoutButton = document.getElementById('logoutButton');
+    if (oldLogoutButton && !oldLogoutButton.dataset.listenerAdded) {
+      oldLogoutButton.addEventListener('click', logout);
+      oldLogoutButton.dataset.listenerAdded = 'true';
+    }
+  }, 1500);
+});
+
+// ================== GLOBAL FUNCTIONS ==================
+
+// Make functions globally accessible (PRESERVING ALL FROM YOUR SCRIPT)
 window.likeComment = likeComment;
 window.dislikeComment = dislikeComment;
 window.hideReplyForm = hideReplyForm;
@@ -759,4 +1302,13 @@ window.markNotificationAsRead = markNotificationAsRead;
 window.markAllNotificationsAsRead = markAllNotificationsAsRead;
 window.toggleNotificationsPanel = toggleNotificationsPanel;
 
-console.log('Enhanced script setup complete - Step 2');
+// NEW social media functions
+window.showMainFeed = showMainFeed;
+window.showNests = showNests;
+window.selectNest = selectNest;
+window.showCreateNestModal = showCreateNestModal;
+window.showJoinNestModal = showJoinNestModal;
+window.createNest = createNest;
+window.joinNest = joinNest;
+
+console.log('Enhanced Social Media Platform script setup complete - ALL FEATURES PRESERVED');
