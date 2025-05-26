@@ -7,7 +7,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadComments();
   
   // Check for new comments every 10 seconds (basic version)
-  setInterval(checkNewComments, 10000);
+  setInterval(() => {
+    checkNewComments();
+  }, 10000);
 });
 
 // Check Login Status
