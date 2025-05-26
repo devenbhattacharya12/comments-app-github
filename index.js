@@ -1,4 +1,4 @@
-// index.js (Backend) - Safe Space App
+// index.js (Backend) - Safe Space App - Minimal Working Version
 require('dotenv').config(); // Load environment variables
 const express = require('express');
 const mongoose = require('mongoose');
@@ -35,24 +35,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// User Schema with Password Hashing
+// User Schema - Start simple, add features later
 const userSchema = new mongoose.Schema({
   username: { type: String, unique: true, required: true },
-  password: { type: String, required: true }, // Store hashed passwords
-  lastPostedAt: { type: Date, default: null },
-  // NEW: Add notifications array
-  notifications: [{
-    type: { type: String, enum: ['tag', 'reply'], required: true },
-    commentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Comment' },
-    fromUser: String,
-    message: String,
-    read: { type: Boolean, default: false },
-    timestamp: { type: Date, default: Date.now }
-  }]
+  password: { type: String, required: true },
+  lastPostedAt: { type: Date, default: null }
 });
 const User = mongoose.model('User', userSchema);
 
-// Enhanced Comment Schema with NEW FIELDS but keeping it simple
+// Comment Schema - Start simple, add features later
 const commentSchema = new mongoose.Schema({
   username: String,
   comment: String,
@@ -60,13 +51,7 @@ const commentSchema = new mongoose.Schema({
   likes: { type: Number, default: 0 },
   dislikes: { type: Number, default: 0 },
   likedBy: { type: [String], default: [] },
-  dislikedBy: { type: [String], default: [] },
-  // NEW: Add these fields but make them optional
-  mediaUrl: { type: String, default: null },
-  mediaType: { type: String, enum: ['image', 'gif'], default: null },
-  parentCommentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Comment', default: null },
-  replies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }],
-  taggedUsers: { type: [String], default: [] }
+  dislikedBy: { type: [String], default: [] }
 });
 const Comment = mongoose.model('Comment', commentSchema);
 
@@ -75,6 +60,8 @@ const Comment = mongoose.model('Comment', commentSchema);
 // Register User with Hashed Password
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
+  
+  console.log('Register attempt:', { username, passwordLength: password?.length });
 
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required.' });
@@ -90,6 +77,7 @@ app.post('/register', async (req, res) => {
     const newUser = new User({ username, password: hashedPassword });
     await newUser.save();
 
+    console.log('User registered successfully:', username);
     res.status(201).json({ message: 'User registered successfully!' });
   } catch (err) {
     console.error('Registration error:', err);
@@ -100,19 +88,24 @@ app.post('/register', async (req, res) => {
 // Login User and Generate JWT Token
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
+  
+  console.log('Login attempt:', { username });
 
   try {
     const user = await User.findOne({ username });
     if (!user) {
+      console.log('User not found:', username);
       return res.status(400).json({ error: 'User not found. Please register.' });
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
+      console.log('Password mismatch for user:', username);
       return res.status(401).json({ error: 'Incorrect password.' });
     }
 
     const token = jwt.sign({ username: user.username }, SECRET_KEY, { expiresIn: '1h' });
+    console.log('Login successful:', username);
     res.json({ message: 'Login successful!', token });
   } catch (err) {
     console.error('Login error:', err);
@@ -123,12 +116,18 @@ app.post('/login', async (req, res) => {
 // Middleware to Verify JWT Token
 const authenticateToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
+  
+  console.log('Auth check - Token present:', !!token);
 
   if (!token) return res.status(401).json({ error: 'Access denied. No token provided.' });
 
   jwt.verify(token, SECRET_KEY, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token.' });
+    if (err) {
+      console.log('Token verification failed:', err.message);
+      return res.status(403).json({ error: 'Invalid token.' });
+    }
 
+    console.log('Token verified for user:', user.username);
     req.user = user;
     next();
   });
@@ -136,48 +135,12 @@ const authenticateToken = (req, res, next) => {
 
 // ================== COMMENTS ROUTES ==================
 
-// Helper function to extract tagged users from comment text
-function extractTaggedUsers(commentText) {
-  const tagRegex = /@(\w+)/g;
-  const tags = [];
-  let match;
-  while ((match = tagRegex.exec(commentText)) !== null) {
-    tags.push(match[1]);
-  }
-  return [...new Set(tags)]; // Remove duplicates
-}
-
-// Helper function to create notifications for tagged users
-async function createTagNotifications(taggedUsers, commentId, fromUser) {
-  for (const username of taggedUsers) {
-    try {
-      await User.findOneAndUpdate(
-        { username },
-        {
-          $push: {
-            notifications: {
-              type: 'tag',
-              commentId,
-              fromUser,
-              message: `${fromUser} tagged you in a comment`,
-              timestamp: new Date()
-            }
-          }
-        }
-      );
-    } catch (err) {
-      console.error(`Error creating notification for ${username}:`, err);
-    }
-  }
-}
-
 // Fetch All Comments
 app.get('/comments', async (req, res) => {
+  console.log('Fetching comments...');
   try {
-    // For now, get all comments and populate replies
-    const comments = await Comment.find({ parentCommentId: null })
-      .populate('replies')
-      .sort({ timestamp: -1 });
+    const comments = await Comment.find().sort({ timestamp: -1 });
+    console.log('Found comments:', comments.length);
     res.json(comments);
   } catch (err) {
     console.error('Error fetching comments:', err);
@@ -185,64 +148,26 @@ app.get('/comments', async (req, res) => {
   }
 });
 
-// Add a New Comment (MODIFIED to handle optional new fields)
+// Add a New Comment
 app.post('/comments', authenticateToken, async (req, res) => {
-  const { comment, parentCommentId } = req.body;
+  const { comment } = req.body;
   const username = req.user.username;
 
-  if (!comment) {
+  console.log('Comment attempt:', { username, commentLength: comment?.length });
+
+  if (!comment || comment.trim() === '') {
+    console.log('Empty comment rejected');
     return res.status(400).json({ error: 'Comment cannot be empty.' });
   }
 
   try {
-    // Extract tagged users
-    const taggedUsers = extractTaggedUsers(comment);
+    const newComment = new Comment({ 
+      username, 
+      comment: comment.trim() 
+    });
     
-    // Create comment data
-    const commentData = {
-      username,
-      comment,
-      taggedUsers
-    };
-
-    // Add parent comment ID if this is a reply
-    if (parentCommentId) {
-      commentData.parentCommentId = parentCommentId;
-    }
-
-    const newComment = new Comment(commentData);
     await newComment.save();
-
-    // If this is a reply, add it to the parent's replies array
-    if (parentCommentId) {
-      await Comment.findByIdAndUpdate(parentCommentId, {
-        $push: { replies: newComment._id }
-      });
-
-      // Notify the parent comment author
-      const parentComment = await Comment.findById(parentCommentId);
-      if (parentComment && parentComment.username !== username) {
-        await User.findOneAndUpdate(
-          { username: parentComment.username },
-          {
-            $push: {
-              notifications: {
-                type: 'reply',
-                commentId: newComment._id,
-                fromUser: username,
-                message: `${username} replied to your comment`,
-                timestamp: new Date()
-              }
-            }
-          }
-        );
-      }
-    }
-
-    // Create notifications for tagged users
-    if (taggedUsers.length > 0) {
-      await createTagNotifications(taggedUsers, newComment._id, username);
-    }
+    console.log('Comment saved:', newComment._id);
 
     await User.findOneAndUpdate(
       { username },
@@ -250,6 +175,7 @@ app.post('/comments', authenticateToken, async (req, res) => {
       { upsert: true, new: true }
     );
 
+    console.log('User lastPostedAt updated:', username);
     res.status(201).json({ message: 'Comment added!', comment: newComment });
   } catch (err) {
     console.error('Error adding comment:', err);
@@ -257,18 +183,27 @@ app.post('/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Like a Comment (Prevents Duplicate Likes and Removes Dislike if Present)
+// Like a Comment
 app.post('/like-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
   
+  console.log('Like attempt:', { commentId, username });
+
+  if (!commentId) {
+    console.log('No commentId provided');
+    return res.status(400).json({ error: 'Comment ID is required.' });
+  }
+
   try {
     const comment = await Comment.findById(commentId);
     if (!comment) {
+      console.log('Comment not found:', commentId);
       return res.status(404).json({ error: 'Comment not found.' });
     }
 
     if (comment.likedBy.includes(username)) {
+      console.log('User already liked this comment:', username, commentId);
       return res.status(400).json({ error: 'You have already liked this comment.' });
     }
 
@@ -276,6 +211,7 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
     if (comment.dislikedBy.includes(username)) {
       comment.dislikes = Math.max(0, comment.dislikes - 1);
       comment.dislikedBy = comment.dislikedBy.filter(user => user !== username);
+      console.log('Removed previous dislike');
     }
 
     // Add the like
@@ -283,6 +219,7 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
     comment.likedBy.push(username);
     await comment.save();
 
+    console.log('Comment liked successfully:', commentId, 'New likes:', comment.likes);
     res.json({ 
       message: 'Comment liked!', 
       likes: comment.likes,
@@ -294,11 +231,17 @@ app.post('/like-comment', authenticateToken, async (req, res) => {
   }
 });
 
-// NEW: Dislike a Comment (Prevents Duplicate Dislikes and Removes Like if Present)
+// Dislike a Comment
 app.post('/dislike-comment', authenticateToken, async (req, res) => {
   const { commentId } = req.body;
   const username = req.user.username;
   
+  console.log('Dislike attempt:', { commentId, username });
+
+  if (!commentId) {
+    return res.status(400).json({ error: 'Comment ID is required.' });
+  }
+
   try {
     const comment = await Comment.findById(commentId);
     if (!comment) {
@@ -320,6 +263,7 @@ app.post('/dislike-comment', authenticateToken, async (req, res) => {
     comment.dislikedBy.push(username);
     await comment.save();
 
+    console.log('Comment disliked successfully:', commentId);
     res.json({ 
       message: 'Comment disliked!', 
       likes: comment.likes,
@@ -328,134 +272,6 @@ app.post('/dislike-comment', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error disliking comment:', err);
     res.status(500).json({ error: 'Failed to dislike comment.' });
-  }
-});
-
-// NEW: Remove Like from a Comment (For future toggle functionality)
-app.post('/unlike-comment', authenticateToken, async (req, res) => {
-  const { commentId } = req.body;
-  const username = req.user.username;
-  
-  try {
-    const comment = await Comment.findById(commentId);
-    if (!comment) {
-      return res.status(404).json({ error: 'Comment not found.' });
-    }
-
-    if (!comment.likedBy.includes(username)) {
-      return res.status(400).json({ error: 'You have not liked this comment.' });
-    }
-
-    comment.likes = Math.max(0, comment.likes - 1);
-    comment.likedBy = comment.likedBy.filter(user => user !== username);
-    await comment.save();
-
-    res.json({ 
-      message: 'Like removed!', 
-      likes: comment.likes,
-      dislikes: comment.dislikes 
-    });
-  } catch (err) {
-    console.error('Error removing like:', err);
-    res.status(500).json({ error: 'Failed to remove like.' });
-  }
-});
-
-// NEW: Remove Dislike from a Comment (For future toggle functionality)
-app.post('/undislike-comment', authenticateToken, async (req, res) => {
-  const { commentId } = req.body;
-  const username = req.user.username;
-  
-  try {
-    const comment = await Comment.findById(commentId);
-    if (!comment) {
-      return res.status(404).json({ error: 'Comment not found.' });
-    }
-
-    if (!comment.dislikedBy.includes(username)) {
-      return res.status(400).json({ error: 'You have not disliked this comment.' });
-    }
-
-    comment.dislikes = Math.max(0, comment.dislikes - 1);
-    comment.dislikedBy = comment.dislikedBy.filter(user => user !== username);
-    await comment.save();
-
-    res.json({ 
-      message: 'Dislike removed!', 
-      likes: comment.likes,
-      dislikes: comment.dislikes 
-    });
-  } catch (err) {
-    console.error('Error removing dislike:', err);
-    res.status(500).json({ error: 'Failed to remove dislike.' });
-  }
-});
-
-// Get replies for a specific comment
-app.get('/comments/:commentId/replies', async (req, res) => {
-  try {
-    const replies = await Comment.find({ parentCommentId: req.params.commentId })
-      .sort({ timestamp: 1 });
-    res.json(replies);
-  } catch (err) {
-    console.error('Error fetching replies:', err);
-    res.status(500).json({ error: 'Failed to fetch replies' });
-  }
-});
-
-// ================== NOTIFICATION ROUTES ==================
-
-// Get user notifications
-app.get('/notifications', authenticateToken, async (req, res) => {
-  const username = req.user.username;
-  
-  try {
-    const user = await User.findOne({ username }).populate('notifications.commentId');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const notifications = user.notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    res.json(notifications);
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
-    res.status(500).json({ error: 'Failed to fetch notifications.' });
-  }
-});
-
-// Mark notification as read
-app.post('/notifications/:notificationId/read', authenticateToken, async (req, res) => {
-  const username = req.user.username;
-  const notificationId = req.params.notificationId;
-  
-  try {
-    await User.findOneAndUpdate(
-      { username, 'notifications._id': notificationId },
-      { $set: { 'notifications.$.read': true } }
-    );
-    
-    res.json({ message: 'Notification marked as read.' });
-  } catch (err) {
-    console.error('Error marking notification as read:', err);
-    res.status(500).json({ error: 'Failed to mark notification as read.' });
-  }
-});
-
-// Get unread notification count
-app.get('/notifications/unread-count', authenticateToken, async (req, res) => {
-  const username = req.user.username;
-  
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-
-    const unreadCount = user.notifications.filter(n => !n.read).length;
-    res.json({ count: unreadCount });
-  } catch (err) {
-    console.error('Error getting unread count:', err);
-    res.status(500).json({ error: 'Failed to get unread count.' });
   }
 });
 
@@ -473,7 +289,6 @@ app.get('/new-comments', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    // Get new comments since the last time the user posted a comment
     const lastPostedAt = user.lastPostedAt || new Date(0);
     const newComments = await Comment.find({
       timestamp: { $gt: lastPostedAt }
@@ -484,6 +299,12 @@ app.get('/new-comments', authenticateToken, async (req, res) => {
     console.error('Error checking new comments:', err);
     res.status(500).json({ error: 'Failed to check new comments.' });
   }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 // Start the server
