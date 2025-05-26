@@ -1,15 +1,20 @@
-// Basic script.js for debugging login issues
-console.log('Script loaded successfully');
+// Enhanced script.js - Step 2: Adding Replies and Tagging
+console.log('Enhanced script loaded - Step 2');
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM loaded');
   checkLoginStatus();
   loadComments();
   
-  // Check for new comments every 10 seconds (basic version)
+  // Check for new comments every 10 seconds
   setInterval(() => {
     checkNewComments();
   }, 10000);
+  
+  // Check for notifications every 30 seconds
+  setInterval(() => {
+    checkNotifications();
+  }, 30000);
 });
 
 // Check Login Status
@@ -26,6 +31,9 @@ function checkLoginStatus() {
     document.getElementById('authSection').classList.add('d-none');
     document.getElementById('logoutButton').classList.remove('d-none');
     document.getElementById('commentSection').classList.remove('d-none');
+    
+    // Check for notifications on login
+    checkNotifications();
     
     console.log('UI updated for logged in user');
   } else {
@@ -117,7 +125,12 @@ document.getElementById('logoutButton').addEventListener('click', () => {
   window.location.reload();
 });
 
-// Load Comments (Basic version)
+// Format comment text with tagged users
+function formatCommentText(text) {
+  return text.replace(/@(\w+)/g, '<span style="color: #1DA1F2; font-weight: bold;">@$1</span>');
+}
+
+// Load Comments with Replies
 async function loadComments() {
   console.log('Loading comments...');
   try {
@@ -142,25 +155,7 @@ async function loadComments() {
 
     comments.forEach(comment => {
       console.log('Processing comment:', comment._id);
-      const li = document.createElement('li');
-      li.classList.add('list-group-item');
-      
-      // Basic comment content
-      li.innerHTML = `
-        <div class="comment-text">
-          <strong class="comment-name">@${comment.username}</strong>: ${comment.comment}
-        </div>
-        <div class="d-flex gap-2 mt-2 align-items-center">
-          <button class="btn btn-sm btn-outline-success" onclick="likeComment('${comment._id}')">
-            👍 Like (<span id="likes-${comment._id}">${comment.likes || 0}</span>)
-          </button>
-          <button class="btn btn-sm btn-outline-danger" onclick="dislikeComment('${comment._id}')">
-            👎 Dislike (<span id="dislikes-${comment._id}">${comment.dislikes || 0}</span>)
-          </button>
-          <small class="text-muted ms-auto">${new Date(comment.timestamp).toLocaleString()}</small>
-        </div>
-      `;
-      
+      const li = createCommentElement(comment);
       commentsList.appendChild(li);
     });
     
@@ -174,7 +169,193 @@ async function loadComments() {
   }
 }
 
-// Like Comment (Basic version)
+// Create comment element with reply support
+function createCommentElement(comment) {
+  const li = document.createElement('li');
+  li.classList.add('list-group-item');
+  
+  // Main comment content
+  const commentContent = document.createElement('div');
+  commentContent.innerHTML = `
+    <div class="comment-text">
+      <strong class="comment-name">@${comment.username}</strong>: ${formatCommentText(comment.comment)}
+    </div>
+  `;
+
+  // Button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.classList.add('d-flex', 'gap-2', 'mt-2', 'align-items-center', 'flex-wrap');
+  
+  // Like button
+  const likeButton = document.createElement('button');
+  likeButton.className = 'btn btn-sm btn-outline-success';
+  likeButton.innerHTML = `👍 Like (<span id="likes-${comment._id}">${comment.likes || 0}</span>)`;
+  likeButton.onclick = () => likeComment(comment._id);
+  
+  // Dislike button
+  const dislikeButton = document.createElement('button');
+  dislikeButton.className = 'btn btn-sm btn-outline-danger';
+  dislikeButton.innerHTML = `👎 Dislike (<span id="dislikes-${comment._id}">${comment.dislikes || 0}</span>)`;
+  dislikeButton.onclick = () => dislikeComment(comment._id);
+  
+  // Reply button
+  const replyButton = document.createElement('button');
+  replyButton.className = 'btn btn-sm btn-outline-primary';
+  replyButton.innerHTML = `💬 Reply`;
+  replyButton.onclick = () => showReplyForm(comment._id, comment.username);
+
+  // Timestamp
+  const timestamp = document.createElement('small');
+  timestamp.className = 'text-muted ms-auto';
+  timestamp.textContent = new Date(comment.timestamp).toLocaleString();
+  
+  buttonContainer.appendChild(likeButton);
+  buttonContainer.appendChild(dislikeButton);
+  buttonContainer.appendChild(replyButton);
+  buttonContainer.appendChild(timestamp);
+  
+  li.appendChild(commentContent);
+  li.appendChild(buttonContainer);
+
+  // Add replies if they exist
+  if (comment.replies && comment.replies.length > 0) {
+    const repliesSection = document.createElement('div');
+    repliesSection.className = 'replies-section mt-3 ms-4';
+    repliesSection.style.borderLeft = '3px solid #1DA1F2';
+    repliesSection.style.paddingLeft = '15px';
+    
+    const repliesHeader = document.createElement('div');
+    repliesHeader.innerHTML = `<small class="text-muted">💬 ${comment.replies.length} ${comment.replies.length === 1 ? 'reply' : 'replies'}</small>`;
+    repliesSection.appendChild(repliesHeader);
+    
+    comment.replies.forEach(reply => {
+      const replyDiv = document.createElement('div');
+      replyDiv.className = 'reply-item mt-2 p-2';
+      replyDiv.style.backgroundColor = '#f8f9fa';
+      replyDiv.style.borderRadius = '8px';
+      
+      replyDiv.innerHTML = `
+        <div class="comment-text">
+          <strong class="comment-name">@${reply.username}</strong>: ${formatCommentText(reply.comment)}
+        </div>
+        <div class="d-flex gap-2 mt-1 align-items-center">
+          <button class="btn btn-sm btn-outline-success" onclick="likeComment('${reply._id}')">
+            👍 (<span id="likes-${reply._id}">${reply.likes || 0}</span>)
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="dislikeComment('${reply._id}')">
+            👎 (<span id="dislikes-${reply._id}">${reply.dislikes || 0}</span>)
+          </button>
+          <small class="text-muted ms-auto">${new Date(reply.timestamp).toLocaleString()}</small>
+        </div>
+      `;
+      
+      repliesSection.appendChild(replyDiv);
+    });
+    
+    li.appendChild(repliesSection);
+  }
+
+  return li;
+}
+
+// Show reply form
+function showReplyForm(parentCommentId, parentUsername) {
+  console.log('Showing reply form for comment:', parentCommentId);
+  
+  // Remove any existing reply forms
+  const existingReplyForm = document.getElementById('replyForm');
+  if (existingReplyForm) {
+    existingReplyForm.remove();
+  }
+  
+  // Create new reply form
+  const replyForm = document.createElement('div');
+  replyForm.id = 'replyForm';
+  replyForm.className = 'card shadow-sm p-3 mt-3';
+  replyForm.innerHTML = `
+    <h6>Reply to @${parentUsername}</h6>
+    <form id="replyFormElement">
+      <textarea class="form-control mb-2" id="replyText" rows="2" placeholder="Write your reply... (Use @username to tag someone)" required></textarea>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm">💬 Post Reply</button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="hideReplyForm()">Cancel</button>
+      </div>
+    </form>
+  `;
+  
+  // Insert after the comment section
+  const commentSection = document.getElementById('commentSection');
+  commentSection.parentNode.insertBefore(replyForm, commentSection.nextSibling);
+  
+  // Add event listener for the reply form
+  document.getElementById('replyFormElement').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await postReply(parentCommentId);
+  });
+  
+  // Focus on the reply textarea
+  document.getElementById('replyText').focus();
+  
+  // Scroll to the reply form
+  replyForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Hide reply form
+function hideReplyForm() {
+  const replyForm = document.getElementById('replyForm');
+  if (replyForm) {
+    replyForm.remove();
+  }
+}
+
+// Post Reply
+async function postReply(parentCommentId) {
+  const token = localStorage.getItem('token');
+  const replyText = document.getElementById('replyText').value.trim();
+
+  console.log('Posting reply:', { parentCommentId, replyLength: replyText.length });
+
+  if (!token) {
+    alert('You must be logged in to reply.');
+    return;
+  }
+
+  if (!replyText) {
+    alert('Reply cannot be empty.');
+    return;
+  }
+
+  try {
+    const response = await fetch('/comments', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ 
+        comment: replyText,
+        parentCommentId: parentCommentId 
+      }),
+    });
+
+    console.log('Reply post response status:', response.status);
+
+    if (response.ok) {
+      hideReplyForm();
+      loadComments(); // Reload to show the new reply
+      console.log('Reply posted successfully');
+    } else {
+      const data = await response.json();
+      console.error('Reply post error:', data);
+      alert(data.error || 'Error posting reply.');
+    }
+  } catch (error) {
+    console.error('Reply post network error:', error);
+    alert('Network error. Please try again.');
+  }
+}
+
+// Like Comment
 async function likeComment(commentId) {
   console.log('Liking comment:', commentId);
   const token = localStorage.getItem('token');
@@ -211,7 +392,7 @@ async function likeComment(commentId) {
   }
 }
 
-// Dislike Comment (Basic version)
+// Dislike Comment
 async function dislikeComment(commentId) {
   console.log('Disliking comment:', commentId);
   const token = localStorage.getItem('token');
@@ -248,7 +429,7 @@ async function dislikeComment(commentId) {
   }
 }
 
-// Post Comment (Basic version)
+// Post Comment
 const commentForm = document.getElementById('commentForm');
 if (commentForm) {
   commentForm.addEventListener('submit', async (e) => {
@@ -297,8 +478,61 @@ if (commentForm) {
   });
 }
 
+// Check for notifications
+async function checkNotifications() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch('/notifications/unread-count', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Unread notifications:', data.count);
+      
+      // For now, just log to console - we'll add UI later
+      if (data.count > 0) {
+        console.log(`You have ${data.count} unread notifications!`);
+      }
+    }
+  } catch (error) {
+    console.error('Error checking notifications:', error);
+  }
+}
+
+// Check for new comments since the user's last post
+async function checkNewComments() {
+  const username = localStorage.getItem("username");
+  const token = localStorage.getItem("token");
+  
+  if (!username || !token) return;
+
+  try {
+    const response = await fetch(`/new-comments?username=${username}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) return;
+    
+    const data = await response.json();
+    const notificationBadge = document.getElementById('notificationBadge');
+    
+    if (notificationBadge && data.count > 0) {
+      notificationBadge.innerHTML = `🔔 ${data.count} new comments since your last post!`;
+      notificationBadge.classList.remove('d-none');
+    } else if (notificationBadge) {
+      notificationBadge.classList.add('d-none');
+    }
+  } catch (error) {
+    console.error("Error checking new comments:", error);
+  }
+}
+
 // Make functions globally accessible
 window.likeComment = likeComment;
 window.dislikeComment = dislikeComment;
+window.hideReplyForm = hideReplyForm;
 
-console.log('Script setup complete');
+console.log('Enhanced script setup complete - Step 2');
