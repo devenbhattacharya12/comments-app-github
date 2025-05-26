@@ -571,13 +571,17 @@ function toggleNotificationsPanel() {
   console.log('Toggling notifications panel');
   const panel = document.getElementById('notificationsPanel');
   
-  if (panel.classList.contains('d-none')) {
+  const isHidden = panel.style.display === 'none' || panel.style.display === '';
+  console.log('Panel display style:', panel.style.display);
+  console.log('Panel is hidden:', isHidden);
+  
+  if (isHidden) {
     console.log('Opening notifications panel');
-    panel.classList.remove('d-none');
+    panel.style.display = 'block';
     loadNotifications();
   } else {
     console.log('Closing notifications panel');
-    panel.classList.add('d-none');
+    panel.style.display = 'none';
   }
 }
 
