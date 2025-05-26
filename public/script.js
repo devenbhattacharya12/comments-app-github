@@ -17,24 +17,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 30000);
   
   // Add notification toggle event listener
-  const notificationsToggle = document.getElementById('notificationsToggle');
-  if (notificationsToggle) {
-    notificationsToggle.addEventListener('click', () => {
-      const panel = document.getElementById('notificationsPanel');
-      if (panel.classList.contains('d-none')) {
-        panel.classList.remove('d-none');
-        loadNotifications();
-      } else {
-        panel.classList.add('d-none');
-      }
-    });
-  }
-  
-  // Add mark all read event listener
-  const markAllRead = document.getElementById('markAllRead');
-  if (markAllRead) {
-    markAllRead.addEventListener('click', markAllNotificationsAsRead);
-  }
+  setTimeout(() => {
+    const notificationsToggle = document.getElementById('notificationsToggle');
+    if (notificationsToggle) {
+      console.log('Adding notification toggle event listener');
+      notificationsToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Notification toggle clicked');
+        toggleNotificationsPanel();
+      });
+    } else {
+      console.log('Notifications toggle not found');
+    }
+    
+    // Add mark all read event listener
+    const markAllRead = document.getElementById('markAllRead');
+    if (markAllRead) {
+      console.log('Adding mark all read event listener');
+      markAllRead.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        markAllNotificationsAsRead();
+      });
+    }
+  }, 1000); // Wait 1 second for elements to be available
 });
 
 // Check Login Status
@@ -560,6 +567,21 @@ function showNotificationToast(message) {
 }
 
 // Toggle notifications panel
+function toggleNotificationsPanel() {
+  console.log('Toggling notifications panel');
+  const panel = document.getElementById('notificationsPanel');
+  
+  if (panel.classList.contains('d-none')) {
+    console.log('Opening notifications panel');
+    panel.classList.remove('d-none');
+    loadNotifications();
+  } else {
+    console.log('Closing notifications panel');
+    panel.classList.add('d-none');
+  }
+}
+
+// Toggle notifications panel
 document.addEventListener('DOMContentLoaded', () => {
   // ... existing code ...
   
@@ -586,6 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load notifications
 async function loadNotifications() {
+  console.log('Loading notifications...');
   const token = localStorage.getItem('token');
   if (!token) return;
 
@@ -596,7 +619,10 @@ async function loadNotifications() {
 
     if (response.ok) {
       const notifications = await response.json();
+      console.log('Loaded notifications:', notifications.length);
       displayNotifications(notifications);
+    } else {
+      console.error('Failed to load notifications:', response.status);
     }
   } catch (error) {
     console.error('Error loading notifications:', error);
@@ -605,6 +631,7 @@ async function loadNotifications() {
 
 // Display notifications
 function displayNotifications(notifications) {
+  console.log('Displaying notifications:', notifications);
   const notificationsList = document.getElementById('notificationsList');
   
   if (notifications.length === 0) {
@@ -613,13 +640,18 @@ function displayNotifications(notifications) {
   }
 
   notificationsList.innerHTML = notifications.map(notification => `
-    <div class="notification-item ${!notification.read ? 'unread' : ''}" onclick="markNotificationAsRead('${notification._id}')">
-      <div class="d-flex justify-content-between">
-        <div>
-          <div><i class="fas fa-${notification.type === 'tag' ? 'at' : 'reply'} me-2"></i><strong>${notification.message}</strong></div>
+    <div class="notification-item ${!notification.read ? 'unread' : ''}" 
+         onclick="markNotificationAsRead('${notification._id}')" 
+         style="cursor: pointer;">
+      <div class="d-flex justify-content-between align-items-start">
+        <div class="flex-grow-1">
+          <div>
+            <i class="fas fa-${notification.type === 'tag' ? 'at' : 'reply'} me-2"></i>
+            <strong>${notification.message}</strong>
+          </div>
           <div class="notification-time">${new Date(notification.timestamp).toLocaleString()}</div>
         </div>
-        ${!notification.read ? '<span class="badge bg-primary">New</span>' : ''}
+        ${!notification.read ? '<span class="badge bg-primary ms-2">New</span>' : ''}
       </div>
     </div>
   `).join('');
@@ -627,6 +659,7 @@ function displayNotifications(notifications) {
 
 // Mark single notification as read
 async function markNotificationAsRead(notificationId) {
+  console.log('Marking notification as read:', notificationId);
   const token = localStorage.getItem('token');
   if (!token) return;
 
@@ -637,8 +670,11 @@ async function markNotificationAsRead(notificationId) {
     });
 
     if (response.ok) {
+      console.log('Notification marked as read successfully');
       loadNotifications();
       checkNotifications();
+    } else {
+      console.error('Failed to mark notification as read:', response.status);
     }
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -647,6 +683,7 @@ async function markNotificationAsRead(notificationId) {
 
 // Mark all notifications as read
 async function markAllNotificationsAsRead() {
+  console.log('Marking all notifications as read');
   const token = localStorage.getItem('token');
   if (!token) return;
 
@@ -655,15 +692,21 @@ async function markAllNotificationsAsRead() {
       headers: { 'Authorization': `Bearer ${token}` }
     }).then(r => r.json());
 
+    console.log('Found notifications to mark as read:', notifications.length);
+
     // Mark each unread notification as read
     const unreadNotifications = notifications.filter(n => !n.read);
+    console.log('Unread notifications:', unreadNotifications.length);
+    
     for (const notification of unreadNotifications) {
       await markNotificationAsRead(notification._id);
     }
     
     // Refresh the display
-    loadNotifications();
-    checkNotifications();
+    setTimeout(() => {
+      loadNotifications();
+      checkNotifications();
+    }, 500);
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
   }
@@ -703,5 +746,6 @@ window.dislikeComment = dislikeComment;
 window.hideReplyForm = hideReplyForm;
 window.markNotificationAsRead = markNotificationAsRead;
 window.markAllNotificationsAsRead = markAllNotificationsAsRead;
+window.toggleNotificationsPanel = toggleNotificationsPanel;
 
 console.log('Enhanced script setup complete - Step 2');
