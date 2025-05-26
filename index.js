@@ -399,7 +399,9 @@ app.use((err, req, res, next) => {
 // Start the server
 app.listen(PORT, () => {
   console.log(`✅ Safe Space Social Media Platform is running at http://localhost:${PORT}`);
-});== AUTHENTICATION ROUTES ==================
+});
+
+// ================== AUTHENTICATION ROUTES ==================
 
 // Register User with Hashed Password
 app.post('/register', async (req, res) => {
