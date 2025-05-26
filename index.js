@@ -82,6 +82,276 @@ const commentSchema = new mongoose.Schema({
 });
 const Comment = mongoose.model('Comment', commentSchema);
 
+// ================== HELPER FUNCTIONS ==================
+
+// Middleware to Verify JWT Token (MOVED BEFORE USAGE)
+const authenticateToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  
+  console.log('Auth check - Token present:', !!token);
+
+  if (!token) return res.status(401).json({ error: 'Access denied. No token provided.' });
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) {
+      console.log('Token verification failed:', err.message);
+      return res.status(403).json({ error: 'Invalid token.' });
+    }
+
+    console.log('Token verified for user:', user.username);
+    req.user = user;
+    next();
+  });
+};
+
+// Helper function to extract tagged users from comment text
+function extractTaggedUsers(commentText) {
+  const tagRegex = /@(\w+)/g;
+  const tags = [];
+  let match;
+  while ((match = tagRegex.exec(commentText)) !== null) {
+    tags.push(match[1]);
+  }
+  return [...new Set(tags)]; // Remove duplicates
+}
+
+// Helper function to create notifications for tagged users
+async function createTagNotifications(taggedUsers, commentId, fromUser) {
+  for (const username of taggedUsers) {
+    try {
+      const user = await User.findOne({ username });
+      if (!user) {
+        console.log(`User ${username} not found, skipping notification`);
+        continue;
+      }
+
+      if (!user.notifications) {
+        user.notifications = [];
+      }
+
+      user.notifications.push({
+        type: 'tag',
+        commentId,
+        fromUser,
+        message: `${fromUser} tagged you in a comment`,
+        timestamp: new Date()
+      });
+
+      await user.save();
+      console.log(`Created tag notification for ${username}`);
+    } catch (err) {
+      console.error(`Error creating notification for ${username}:`, err);
+    }
+  }
+}
+
+// ================== AUTHENTICATION ROUTES ==================
+
+// Register User with Hashed Password
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+  
+  console.log('Register attempt:', { username, passwordLength: password?.length });
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required.' });
+  }
+
+  try {
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username already exists.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ username, password: hashedPassword });
+    await newUser.save();
+
+    console.log('User registered successfully:', username);
+    res.status(201).json({ message: 'User registered successfully!' });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Failed to register user.' });
+  }
+});
+
+// Login User and Generate JWT Token
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  
+  console.log('Login attempt:', { username });
+
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      console.log('User not found:', username);
+      return res.status(400).json({ error: 'User not found. Please register.' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      console.log('Password mismatch for user:', username);
+      return res.status(401).json({ error: 'Incorrect password.' });
+    }
+
+    const token = jwt.sign({ username: user.username }, SECRET_KEY, { expiresIn: '1h' });
+    console.log('Login successful:', username);
+    res.json({ message: 'Login successful!', token });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed.' });
+  }
+});
+
+// ================== NEST ROUTES ==================
+
+// Create a new nest
+app.post('/nests', authenticateToken, async (req, res) => {
+  const { name, description, privacy } = req.body;
+  const creator = req.user.username;
+
+  console.log('Creating nest:', { name, creator, privacy });
+
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ error: 'Nest name is required.' });
+  }
+
+  try {
+    const newNest = new Nest({
+      name: name.trim(),
+      description: description || '',
+      creator,
+      members: [creator], // Creator is automatically a member
+      privacy: privacy || 'public'
+    });
+
+    await newNest.save();
+
+    // Add nest to creator's nests array
+    await User.findOneAndUpdate(
+      { username: creator },
+      { $push: { nests: newNest._id } }
+    );
+
+    console.log('Nest created successfully:', newNest._id);
+    res.status(201).json({ message: 'Nest created successfully!', nest: newNest });
+  } catch (err) {
+    console.error('Error creating nest:', err);
+    res.status(500).json({ error: 'Failed to create nest.' });
+  }
+});
+
+// Get user's nests
+app.get('/nests', authenticateToken, async (req, res) => {
+  const username = req.user.username;
+
+  try {
+    const nests = await Nest.find({ members: username }).sort({ lastActivity: -1 });
+    console.log(`Found ${nests.length} nests for user ${username}`);
+    res.json(nests);
+  } catch (err) {
+    console.error('Error fetching nests:', err);
+    res.status(500).json({ error: 'Failed to fetch nests.' });
+  }
+});
+
+// Get public nests (for discovery)
+app.get('/nests/discover', authenticateToken, async (req, res) => {
+  const username = req.user.username;
+  const { search } = req.query;
+
+  try {
+    let query = { 
+      privacy: 'public',
+      members: { $ne: username } // Not already a member
+    };
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const nests = await Nest.find(query)
+      .limit(20)
+      .sort({ createdAt: -1 });
+
+    console.log(`Found ${nests.length} discoverable nests`);
+    res.json(nests);
+  } catch (err) {
+    console.error('Error discovering nests:', err);
+    res.status(500).json({ error: 'Failed to discover nests.' });
+  }
+});
+
+// Join a nest
+app.post('/nests/:nestId/join', authenticateToken, async (req, res) => {
+  const { nestId } = req.params;
+  const username = req.user.username;
+
+  console.log('User joining nest:', { username, nestId });
+
+  try {
+    const nest = await Nest.findById(nestId);
+    if (!nest) {
+      return res.status(404).json({ error: 'Nest not found.' });
+    }
+
+    if (nest.members.includes(username)) {
+      return res.status(400).json({ error: 'You are already a member of this nest.' });
+    }
+
+    if (nest.privacy === 'private') {
+      return res.status(403).json({ error: 'This nest is private. You need an invitation.' });
+    }
+
+    // Add user to nest
+    nest.members.push(username);
+    nest.lastActivity = new Date();
+    await nest.save();
+
+    // Add nest to user's nests
+    await User.findOneAndUpdate(
+      { username },
+      { $push: { nests: nestId } }
+    );
+
+    console.log('User joined nest successfully');
+    res.json({ message: 'Successfully joined the nest!' });
+  } catch (err) {
+    console.error('Error joining nest:', err);
+    res.status(500).json({ error: 'Failed to join nest.' });
+  }
+});
+
+// Get nest details and posts
+app.get('/nests/:nestId', authenticateToken, async (req, res) => {
+  const { nestId } = req.params;
+  const username = req.user.username;
+
+  try {
+    const nest = await Nest.findById(nestId);
+    if (!nest) {
+      return res.status(404).json({ error: 'Nest not found.' });
+    }
+
+    if (!nest.members.includes(username)) {
+      return res.status(403).json({ error: 'You are not a member of this nest.' });
+    }
+
+    // Get nest posts
+    const posts = await Comment.find({ nestId, parentCommentId: null })
+      .populate('replies')
+      .sort({ timestamp: -1 });
+
+    res.json({ nest, posts });
+  } catch (err) {
+    console.error('Error fetching nest details:', err);
+    res.status(500).json({ error: 'Failed to fetch nest details.' });
+  }
+});
+
 // ================== COMMENTS ROUTES ==================
 
 // Fetch All Comments (Main Feed)
@@ -400,275 +670,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`✅ Safe Space Social Media Platform is running at http://localhost:${PORT}`);
 });
-
-// ================== AUTHENTICATION ROUTES ==================
-
-// Register User with Hashed Password
-app.post('/register', async (req, res) => {
-  const { username, password } = req.body;
-  
-  console.log('Register attempt:', { username, passwordLength: password?.length });
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required.' });
-  }
-
-  try {
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Username already exists.' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = new User({ username, password: hashedPassword });
-    await newUser.save();
-
-    console.log('User registered successfully:', username);
-    res.status(201).json({ message: 'User registered successfully!' });
-  } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ error: 'Failed to register user.' });
-  }
-});
-
-// Login User and Generate JWT Token
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  
-  console.log('Login attempt:', { username });
-
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      console.log('User not found:', username);
-      return res.status(400).json({ error: 'User not found. Please register.' });
-    }
-
-    const passwordMatch = await bcrypt.compare(password, user.password);
-    if (!passwordMatch) {
-      console.log('Password mismatch for user:', username);
-      return res.status(401).json({ error: 'Incorrect password.' });
-    }
-
-    const token = jwt.sign({ username: user.username }, SECRET_KEY, { expiresIn: '1h' });
-    console.log('Login successful:', username);
-    res.json({ message: 'Login successful!', token });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Login failed.' });
-  }
-});
-
-// Middleware to Verify JWT Token
-const authenticateToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  
-  console.log('Auth check - Token present:', !!token);
-
-  if (!token) return res.status(401).json({ error: 'Access denied. No token provided.' });
-
-  jwt.verify(token, SECRET_KEY, (err, user) => {
-    if (err) {
-      console.log('Token verification failed:', err.message);
-      return res.status(403).json({ error: 'Invalid token.' });
-    }
-
-    console.log('Token verified for user:', user.username);
-    req.user = user;
-    next();
-  });
-};
-
-// ================== HELPER FUNCTIONS ==================
-
-// Helper function to extract tagged users from comment text
-function extractTaggedUsers(commentText) {
-  const tagRegex = /@(\w+)/g;
-  const tags = [];
-  let match;
-  while ((match = tagRegex.exec(commentText)) !== null) {
-    tags.push(match[1]);
-  }
-  return [...new Set(tags)]; // Remove duplicates
-}
-
-// Helper function to create notifications for tagged users
-async function createTagNotifications(taggedUsers, commentId, fromUser) {
-  for (const username of taggedUsers) {
-    try {
-      const user = await User.findOne({ username });
-      if (!user) {
-        console.log(`User ${username} not found, skipping notification`);
-        continue;
-      }
-
-      if (!user.notifications) {
-        user.notifications = [];
-      }
-
-      user.notifications.push({
-        type: 'tag',
-        commentId,
-        fromUser,
-        message: `${fromUser} tagged you in a comment`,
-        timestamp: new Date()
-      });
-
-      await user.save();
-      console.log(`Created tag notification for ${username}`);
-    } catch (err) {
-      console.error(`Error creating notification for ${username}:`, err);
-    }
-  }
-}
-
-// ================== NEST ROUTES ==================
-
-// Create a new nest
-app.post('/nests', authenticateToken, async (req, res) => {
-  const { name, description, privacy } = req.body;
-  const creator = req.user.username;
-
-  console.log('Creating nest:', { name, creator, privacy });
-
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ error: 'Nest name is required.' });
-  }
-
-  try {
-    const newNest = new Nest({
-      name: name.trim(),
-      description: description || '',
-      creator,
-      members: [creator], // Creator is automatically a member
-      privacy: privacy || 'public'
-    });
-
-    await newNest.save();
-
-    // Add nest to creator's nests array
-    await User.findOneAndUpdate(
-      { username: creator },
-      { $push: { nests: newNest._id } }
-    );
-
-    console.log('Nest created successfully:', newNest._id);
-    res.status(201).json({ message: 'Nest created successfully!', nest: newNest });
-  } catch (err) {
-    console.error('Error creating nest:', err);
-    res.status(500).json({ error: 'Failed to create nest.' });
-  }
-});
-
-// Get user's nests
-app.get('/nests', authenticateToken, async (req, res) => {
-  const username = req.user.username;
-
-  try {
-    const nests = await Nest.find({ members: username }).sort({ lastActivity: -1 });
-    console.log(`Found ${nests.length} nests for user ${username}`);
-    res.json(nests);
-  } catch (err) {
-    console.error('Error fetching nests:', err);
-    res.status(500).json({ error: 'Failed to fetch nests.' });
-  }
-});
-
-// Get public nests (for discovery)
-app.get('/nests/discover', authenticateToken, async (req, res) => {
-  const username = req.user.username;
-  const { search } = req.query;
-
-  try {
-    let query = { 
-      privacy: 'public',
-      members: { $ne: username } // Not already a member
-    };
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    const nests = await Nest.find(query)
-      .limit(20)
-      .sort({ createdAt: -1 });
-
-    console.log(`Found ${nests.length} discoverable nests`);
-    res.json(nests);
-  } catch (err) {
-    console.error('Error discovering nests:', err);
-    res.status(500).json({ error: 'Failed to discover nests.' });
-  }
-});
-
-// Join a nest
-app.post('/nests/:nestId/join', authenticateToken, async (req, res) => {
-  const { nestId } = req.params;
-  const username = req.user.username;
-
-  console.log('User joining nest:', { username, nestId });
-
-  try {
-    const nest = await Nest.findById(nestId);
-    if (!nest) {
-      return res.status(404).json({ error: 'Nest not found.' });
-    }
-
-    if (nest.members.includes(username)) {
-      return res.status(400).json({ error: 'You are already a member of this nest.' });
-    }
-
-    if (nest.privacy === 'private') {
-      return res.status(403).json({ error: 'This nest is private. You need an invitation.' });
-    }
-
-    // Add user to nest
-    nest.members.push(username);
-    nest.lastActivity = new Date();
-    await nest.save();
-
-    // Add nest to user's nests
-    await User.findOneAndUpdate(
-      { username },
-      { $push: { nests: nestId } }
-    );
-
-    console.log('User joined nest successfully');
-    res.json({ message: 'Successfully joined the nest!' });
-  } catch (err) {
-    console.error('Error joining nest:', err);
-    res.status(500).json({ error: 'Failed to join nest.' });
-  }
-});
-
-// Get nest details and posts
-app.get('/nests/:nestId', authenticateToken, async (req, res) => {
-  const { nestId } = req.params;
-  const username = req.user.username;
-
-  try {
-    const nest = await Nest.findById(nestId);
-    if (!nest) {
-      return res.status(404).json({ error: 'Nest not found.' });
-    }
-
-    if (!nest.members.includes(username)) {
-      return res.status(403).json({ error: 'You are not a member of this nest.' });
-    }
-
-    // Get nest posts
-    const posts = await Comment.find({ nestId, parentCommentId: null })
-      .populate('replies')
-      .sort({ timestamp: -1 });
-
-    res.json({ nest, posts });
-  } catch (err) {
-    console.error('Error fetching nest details:', err);
-    res.status(500).json({ error: 'Failed to fetch nest details.' });
-  }
-});
-
-// ================
