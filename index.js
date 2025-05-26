@@ -164,20 +164,28 @@ function extractTaggedUsers(commentText) {
 async function createTagNotifications(taggedUsers, commentId, fromUser) {
   for (const username of taggedUsers) {
     try {
-      await User.findOneAndUpdate(
-        { username },
-        {
-          $push: {
-            notifications: {
-              type: 'tag',
-              commentId,
-              fromUser,
-              message: `${fromUser} tagged you in a comment`,
-              timestamp: new Date()
-            }
-          }
-        }
-      );
+      // First ensure the user exists and has a notifications array
+      const user = await User.findOne({ username });
+      if (!user) {
+        console.log(`User ${username} not found, skipping notification`);
+        continue;
+      }
+
+      // Initialize notifications array if it doesn't exist
+      if (!user.notifications) {
+        user.notifications = [];
+      }
+
+      // Add the notification
+      user.notifications.push({
+        type: 'tag',
+        commentId,
+        fromUser,
+        message: `${fromUser} tagged you in a comment`,
+        timestamp: new Date()
+      });
+
+      await user.save();
       console.log(`Created tag notification for ${username}`);
     } catch (err) {
       console.error(`Error creating notification for ${username}:`, err);
@@ -396,9 +404,11 @@ app.get('/notifications', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const notifications = user.notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    console.log('Found notifications:', notifications.length);
-    res.json(notifications);
+    // Handle users who don't have notifications field yet (backward compatibility)
+    const notifications = user.notifications || [];
+    const sortedNotifications = notifications.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    console.log('Found notifications:', sortedNotifications.length);
+    res.json(sortedNotifications);
   } catch (err) {
     console.error('Error fetching notifications:', err);
     res.status(500).json({ error: 'Failed to fetch notifications.' });
@@ -435,7 +445,9 @@ app.get('/notifications/unread-count', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const unreadCount = user.notifications.filter(n => !n.read).length;
+    // Handle users who don't have notifications field yet (backward compatibility)
+    const notifications = user.notifications || [];
+    const unreadCount = notifications.filter(n => !n.read).length;
     console.log('Unread notifications for', username, ':', unreadCount);
     res.json({ count: unreadCount });
   } catch (err) {
