@@ -158,9 +158,16 @@ document.getElementById('logoutButton').addEventListener('click', () => {
   window.location.reload();
 });
 
-// Format comment text with tagged users
+// Format comment text with tagged users and clickable links
 function formatCommentText(text) {
-  return text.replace(/@(\w+)/g, '<span style="color: #1DA1F2; font-weight: bold;">@$1</span>');
+  // First, make URLs clickable
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  let formattedText = text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #1DA1F2; text-decoration: underline;">$1</a>');
+  
+  // Then, make tagged users styled
+  formattedText = formattedText.replace(/@(\w+)/g, '<span style="color: #1DA1F2; font-weight: bold;">@$1</span>');
+  
+  return formattedText;
 }
 
 // Load Comments with Replies
