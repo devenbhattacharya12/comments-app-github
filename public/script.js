@@ -15,6 +15,26 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     checkNotifications();
   }, 30000);
+  
+  // Add notification toggle event listener
+  const notificationsToggle = document.getElementById('notificationsToggle');
+  if (notificationsToggle) {
+    notificationsToggle.addEventListener('click', () => {
+      const panel = document.getElementById('notificationsPanel');
+      if (panel.classList.contains('d-none')) {
+        panel.classList.remove('d-none');
+        loadNotifications();
+      } else {
+        panel.classList.add('d-none');
+      }
+    });
+  }
+  
+  // Add mark all read event listener
+  const markAllRead = document.getElementById('markAllRead');
+  if (markAllRead) {
+    markAllRead.addEventListener('click', markAllNotificationsAsRead);
+  }
 });
 
 // Check Login Status
@@ -29,8 +49,14 @@ function checkLoginStatus() {
   if (token && username) {
     console.log('User is logged in, updating UI...');
     document.getElementById('authSection').classList.add('d-none');
-    document.getElementById('logoutButton').classList.remove('d-none');
+    document.getElementById('userMenuSection').classList.remove('d-none');
     document.getElementById('commentSection').classList.remove('d-none');
+    
+    // Set welcome message
+    const welcomeMessage = document.getElementById('welcomeMessage');
+    if (welcomeMessage) {
+      welcomeMessage.textContent = `Welcome, @${username}!`;
+    }
     
     // Check for notifications on login
     checkNotifications();
@@ -492,13 +518,154 @@ async function checkNotifications() {
       const data = await response.json();
       console.log('Unread notifications:', data.count);
       
-      // For now, just log to console - we'll add UI later
+      const badge = document.getElementById('notificationCount');
+      const currentCount = parseInt(badge.textContent) || 0;
+      
       if (data.count > 0) {
-        console.log(`You have ${data.count} unread notifications!`);
+        badge.textContent = data.count;
+        badge.classList.remove('d-none');
+        
+        // Show toast notification if count increased
+        if (data.count > currentCount) {
+          showNotificationToast(`You have ${data.count} new notification${data.count > 1 ? 's' : ''}!`);
+        }
+      } else {
+        badge.classList.add('d-none');
       }
     }
   } catch (error) {
     console.error('Error checking notifications:', error);
+  }
+}
+
+// Show notification toast
+function showNotificationToast(message) {
+  const toastContainer = document.getElementById('notificationToast');
+  
+  const toast = document.createElement('div');
+  toast.className = 'alert alert-info alert-dismissible fade show';
+  toast.innerHTML = `
+    <i class="fas fa-bell me-2"></i>${message}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  toastContainer.appendChild(toast);
+  
+  // Auto remove after 5 seconds
+  setTimeout(() => {
+    if (toast.parentNode) {
+      toast.remove();
+    }
+  }, 5000);
+}
+
+// Toggle notifications panel
+document.addEventListener('DOMContentLoaded', () => {
+  // ... existing code ...
+  
+  // Add notification toggle event listener
+  const notificationsToggle = document.getElementById('notificationsToggle');
+  if (notificationsToggle) {
+    notificationsToggle.addEventListener('click', () => {
+      const panel = document.getElementById('notificationsPanel');
+      if (panel.classList.contains('d-none')) {
+        panel.classList.remove('d-none');
+        loadNotifications();
+      } else {
+        panel.classList.add('d-none');
+      }
+    });
+  }
+  
+  // Add mark all read event listener
+  const markAllRead = document.getElementById('markAllRead');
+  if (markAllRead) {
+    markAllRead.addEventListener('click', markAllNotificationsAsRead);
+  }
+});
+
+// Load notifications
+async function loadNotifications() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch('/notifications', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const notifications = await response.json();
+      displayNotifications(notifications);
+    }
+  } catch (error) {
+    console.error('Error loading notifications:', error);
+  }
+}
+
+// Display notifications
+function displayNotifications(notifications) {
+  const notificationsList = document.getElementById('notificationsList');
+  
+  if (notifications.length === 0) {
+    notificationsList.innerHTML = '<div class="p-3 text-center text-muted">No notifications</div>';
+    return;
+  }
+
+  notificationsList.innerHTML = notifications.map(notification => `
+    <div class="notification-item ${!notification.read ? 'unread' : ''}" onclick="markNotificationAsRead('${notification._id}')">
+      <div class="d-flex justify-content-between">
+        <div>
+          <div><i class="fas fa-${notification.type === 'tag' ? 'at' : 'reply'} me-2"></i><strong>${notification.message}</strong></div>
+          <div class="notification-time">${new Date(notification.timestamp).toLocaleString()}</div>
+        </div>
+        ${!notification.read ? '<span class="badge bg-primary">New</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// Mark single notification as read
+async function markNotificationAsRead(notificationId) {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const response = await fetch(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      loadNotifications();
+      checkNotifications();
+    }
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+}
+
+// Mark all notifications as read
+async function markAllNotificationsAsRead() {
+  const token = localStorage.getItem('token');
+  if (!token) return;
+
+  try {
+    const notifications = await fetch('/notifications', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then(r => r.json());
+
+    // Mark each unread notification as read
+    const unreadNotifications = notifications.filter(n => !n.read);
+    for (const notification of unreadNotifications) {
+      await markNotificationAsRead(notification._id);
+    }
+    
+    // Refresh the display
+    loadNotifications();
+    checkNotifications();
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
   }
 }
 
@@ -534,5 +701,7 @@ async function checkNewComments() {
 window.likeComment = likeComment;
 window.dislikeComment = dislikeComment;
 window.hideReplyForm = hideReplyForm;
+window.markNotificationAsRead = markNotificationAsRead;
+window.markAllNotificationsAsRead = markAllNotificationsAsRead;
 
 console.log('Enhanced script setup complete - Step 2');

@@ -5,13 +5,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Safe Space</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f8f9fa;
+    }
+
+    .card {
+      border-radius: 15px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .btn-primary {
+      background-color: #1DA1F2;
+      border-color: #1DA1F2;
+    }
+    .btn-primary:hover {
+      background-color: #0d8ddb;
+    }
+
+    .list-group-item {
+      border: none;
+      padding: 15px;
+      border-bottom: 1px solid #e1e8ed;
+      background-color: white;
+    }
+
+    .comment-text {
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .comment-name {
+      font-weight: bold;
+      color: #1DA1F2;
+    }
+
+    .comment-time {
+      font-size: 0.8rem;
+      color: gray;
+    }
+
+    .replies-section {
+      background-color: #f8f9fa;
+      border-left: 3px solid #1DA1F2;
+      margin-left: 20px;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .notification-badge {
+      position: relative;
+      display: inline-block;
+    }
+
+    .notification-count {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background-color: #dc3545;
+      color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    .notification-item {
+      padding: 12px;
+      border-bottom: 1px solid #dee2e6;
+      background-color: white;
+      transition: background-color 0.3s;
+    }
+
+    .notification-item.unread {
+      background-color: #e3f2fd;
+      border-left: 4px solid #1DA1F2;
+    }
+
+    .notification-item:hover {
+      background-color: #f8f9fa;
+    }
+
+    .notification-time {
+      font-size: 0.8rem;
+      color: #6c757d;
+    }
+
+    .notification-toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1050;
+      min-width: 300px;
+      max-width: 400px;
+    }
+
+    .user-menu {
+      background-color: white;
+      border-radius: 8px;
+      padding: 10px 15px;
+      display: flex;
+      justify-content: between;
+      align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .tagged-user {
+      color: #1DA1F2;
+      font-weight: bold;
+    }
+  </style>
 </head>
-<body class="bg-light">
+<body>
+  <!-- Notification Toast Container -->
+  <div id="notificationToast" class="notification-toast"></div>
+
   <div class="container mt-4">
     <div class="row justify-content-center">
-      <div class="col-md-6">
-        <div>
+      <div class="col-md-8">
+        <div class="text-center mb-4">
           <h2>Community Guidelines: don't be a dick</h2>
         </div>
         
@@ -36,21 +162,47 @@
           </div>
         </div>
 
-        <!-- Logout Button -->
-        <button id="logoutButton" class="btn btn-danger w-100 d-none mb-3">Logout</button>
+        <!-- User Menu (Visible After Login) -->
+        <div class="d-none" id="userMenuSection">
+          <div class="user-menu mb-3">
+            <div class="d-flex align-items-center">
+              <span id="welcomeMessage" class="me-3"></span>
+              <button id="notificationsToggle" class="btn btn-outline-primary notification-badge me-2">
+                <i class="fas fa-bell"></i>
+                <span id="notificationCount" class="notification-count d-none">0</span>
+              </button>
+            </div>
+            <button id="logoutButton" class="btn btn-danger btn-sm">Logout</button>
+          </div>
+
+          <!-- Notifications Panel -->
+          <div class="card shadow-sm mb-3 d-none" id="notificationsPanel">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h6 class="mb-0"><i class="fas fa-bell me-2"></i>Notifications</h6>
+              <button id="markAllRead" class="btn btn-sm btn-outline-secondary">Mark All Read</button>
+            </div>
+            <div id="notificationsList" class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+              <div class="p-3 text-center text-muted">No notifications</div>
+            </div>
+          </div>
+        </div>
 
         <!-- Comment Form (Visible After Login) -->
         <div class="card shadow-sm p-3 mb-3 d-none" id="commentSection">
-          <h5>What's on your mind...</h5>
+          <h5><i class="fas fa-comment-dots me-2"></i>What's on your mind...</h5>
           <form id="commentForm">
-            <textarea class="form-control mb-2" id="comment" rows="3" placeholder="Write something..." required></textarea>
-            <button type="submit" class="btn btn-primary w-100">Post</button>
+            <textarea class="form-control mb-2" id="comment" rows="3" placeholder="Write something... (Use @username to tag someone)" required></textarea>
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="fas fa-paper-plane me-2"></i>Post
+            </button>
           </form>
         </div>
 
         <!-- Comments Section -->
         <div class="card shadow-sm p-3">
-          <h5 class="fw-bold">Recent Thoughts</h5>
+          <h5 class="fw-bold">
+            <i class="fas fa-comments me-2"></i>Recent Thoughts
+          </h5>
 
           <!-- New Comments Notification Badge -->
           <div id="notificationBadge" class="alert alert-info d-none"></div>
